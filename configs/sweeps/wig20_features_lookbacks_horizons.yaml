@@ -1,0 +1,28 @@
+base_config: configs/example.yaml
+
+sweep:
+  name: wig20_features_lookbacks_horizons
+  output_dir: outputs/sweeps
+
+  feature_sets:
+    close:
+      - Close
+    ohlcv:
+      - Open
+      - High
+      - Low
+      - Close
+      - Volume
+
+  sequence_lengths:
+    - 7
+    - 14
+    - 30
+    - 60
+    - 120
+
+  horizons:
+    - 1
+    - 5
+    - 10
+    - 20
