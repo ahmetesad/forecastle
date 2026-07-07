@@ -1,0 +1,61 @@
+experiment:
+  name: wig20_lstm
+  output_dir: outputs
+  seed: 42
+  device: auto
+
+dataset:
+  name: wig20
+  source: csv
+  csv_path: data/raw/wig20.csv
+  date_column: Date
+  target_column: Close
+  feature_columns:
+    - Open
+    - High
+    - Low
+    - Close
+    - Volume
+  target_transform: log_return
+  sequence_length: 30
+  horizon: 1
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  scale_features: true
+  scale_target: true
+
+training:
+  batch_size: 64
+  epochs: 80
+  learning_rate: 0.001
+  weight_decay: 0.0
+  patience: 10
+  models:
+    - name: lstm
+      params:
+        hidden_size: 64
+        num_layers: 1
+        dropout: 0.0
+
+tuning:
+  enabled: true
+  model: lstm
+  trials: 50
+  metric: price_rmse
+  seed: 42
+  study_name: wig20_lstm_optuna
+  storage: sqlite:///outputs/studies/wig20_lstm_optuna.db
+  n_jobs: 1
+  use_pruner: true
+  sequence_lengths:
+    - 7
+    - 14
+    - 30
+    - 60
+    - 120
+  batch_sizes:
+    - 16
+    - 32
+    - 64
+    - 128
