@@ -1,0 +1,20 @@
+dataset:
+  name: bist100
+  symbol: XU100.IS
+  csv_path: data/raw/bist100.csv
+  date_column: Date
+  target_column: Close
+  feature_columns:
+    - Open
+    - High
+    - Low
+    - Close
+    - Volume
+  sequence_length: 30
+  horizon: 1
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  scale_features: true
+  scale_target: true
+  dropna: true

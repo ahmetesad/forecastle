@@ -1,0 +1,57 @@
+[project]
+name = "forecastle"
+version = "0.1.0"
+description = "Modular PyTorch framework for financial time series forecasting experiments."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "matplotlib>=3.9.0",
+    "numpy>=2.0.0",
+    "optuna>=4.0.0",
+    "pandas>=2.2.0",
+    "pyyaml>=6.0.2",
+    "scikit-learn>=1.5.0",
+    "torch>=2.4.0",
+    "yfinance>=0.2.50",
+]
+
+[project.scripts]
+forecastle = "forecastle.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "ruff>=0.8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/forecastle"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+    "B",
+    "C4",
+    "SIM",
+    "TCH",
+    "RUF",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

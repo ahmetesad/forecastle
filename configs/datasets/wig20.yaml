@@ -1,0 +1,21 @@
+dataset:
+  name: wig20
+  symbol: WIG20.WA
+  csv_path: data/raw/wig20.csv
+  date_column: Date
+  target_column: Close
+  target_transform: log_return
+  feature_columns:
+    - Open
+    - High
+    - Low
+    - Close
+    - Volume
+  sequence_length: 30
+  horizon: 1
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  scale_features: true
+  scale_target: true
+  dropna: true

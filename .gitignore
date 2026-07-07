@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+*.egg-info/
+outputs/
+data/raw/
+data/processed/
+*.db
+*.sqlite
+*.pt
+wig20_d.csv

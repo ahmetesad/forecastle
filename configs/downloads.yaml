@@ -1,0 +1,10 @@
+datasets:
+  wig20:
+    symbol: WIG20.WA
+    output: data/raw/wig20.csv
+  bist100:
+    symbol: XU100.IS
+    output: data/raw/bist100.csv
+  sp500:
+    symbol: ^GSPC
+    output: data/raw/sp500.csv
