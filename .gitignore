@@ -11,3 +11,4 @@ data/processed/
 *.sqlite
 *.pt
 wig20_d.csv
+learning_checklist.md
