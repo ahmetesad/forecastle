@@ -6,6 +6,7 @@ from typing import Any
 from torch import nn
 
 from forecastle.models.cnn import CNN1DRegressor
+from forecastle.models.dnfs import DNFSRegressor
 from forecastle.models.mlp import MLPRegressor
 from forecastle.models.recurrent import GRURegressor, LSTMRegressor, RNNRegressor
 
@@ -32,12 +33,17 @@ def _build_cnn1d(_sequence_length: int, feature_count: int, params: dict[str, An
     return CNN1DRegressor(feature_count=feature_count, **params)
 
 
+def _build_dnfs(sequence_length: int, feature_count: int, params: dict[str, Any]) -> nn.Module:
+    return DNFSRegressor(sequence_length=sequence_length, feature_count=feature_count, **params)
+
+
 MODEL_REGISTRY: dict[str, ModelFactory] = {
     "mlp": _build_mlp,
     "rnn": _build_rnn,
     "lstm": _build_lstm,
     "gru": _build_gru,
     "cnn1d": _build_cnn1d,
+    "dnfs": _build_dnfs,
 }
 
 

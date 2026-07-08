@@ -80,6 +80,7 @@ and train/validation/test splits.
 - LSTM
 - GRU
 - 1D CNN
+- DNFS baseline
 
 ## Generated artifacts
 
@@ -98,6 +99,20 @@ The comparison includes two non-neural baselines:
   return is zero.
 - `linear_regression`: flattened lookback windows fit with ordinary least squares on the
   training split only.
+
+## DNFS baseline
+
+The `dnfs` model is a compact neuro-fuzzy regression baseline inspired by ANFIS-style
+Takagi-Sugeno systems.
+
+Example YAML:
+
+```yaml
+- name: dnfs
+  params:
+    num_rules: 16
+    dropout: 0.1
+```
 
 ## Development
 

@@ -57,3 +57,7 @@ training:
         channels: [32, 64]
         kernel_size: 3
         dropout: 0.1
+    - name: dnfs
+      params:
+        num_rules: 16
+        dropout: 0.1
