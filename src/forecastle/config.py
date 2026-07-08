@@ -27,7 +27,7 @@ class DatasetConfig:
     target_column: str
     source: str = "csv"
     feature_columns: list[str] | None = None
-    target_transform: TargetTransform = "price"
+    target_transform: TargetTransform = "log_return"
     sequence_length: int = 30
     horizon: int = 1
     train_ratio: float = 0.7
@@ -122,7 +122,7 @@ def _parse_dataset(raw: dict[str, Any]) -> DatasetConfig:
         date_column=str(raw["date_column"]),
         target_column=str(raw["target_column"]),
         feature_columns=list(feature_columns) if feature_columns is not None else None,
-        target_transform=str(raw.get("target_transform", "price")),  # type: ignore[arg-type]
+        target_transform=str(raw.get("target_transform", "log_return")),  # type: ignore[arg-type]
         sequence_length=int(raw.get("sequence_length", 30)),
         horizon=int(raw.get("horizon", 1)),
         train_ratio=float(raw.get("train_ratio", 0.7)),

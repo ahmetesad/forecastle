@@ -4,6 +4,7 @@ dataset:
   csv_path: data/raw/sp500.csv
   date_column: Date
   target_column: Close
+  target_transform: log_return
   feature_columns:
     - Open
     - High
