@@ -1,0 +1,58 @@
+experiment:
+  name: sp500_all_models_wig20_tuned_setting
+  output_dir: outputs
+  seed: 42
+  device: auto
+
+dataset:
+  name: sp500
+  source: csv
+  csv_path: data/raw/sp500.csv
+  date_column: Date
+  target_column: Close
+  feature_columns:
+    - Open
+    - High
+    - Low
+    - Close
+    - Volume
+  target_transform: log_return
+  sequence_length: 7
+  horizon: 1
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  scale_features: true
+  scale_target: true
+
+training:
+  batch_size: 32
+  epochs: 80
+  learning_rate: 0.003081761420417632
+  weight_decay: 0.00042949387283784554
+  patience: 10
+  models:
+    - name: mlp
+      params:
+        hidden_sizes: [16]
+        dropout: 0.49495257160771644
+    - name: rnn
+      params:
+        hidden_size: 16
+        num_layers: 1
+        dropout: 0.49495257160771644
+    - name: lstm
+      params:
+        hidden_size: 16
+        num_layers: 1
+        dropout: 0.49495257160771644
+    - name: gru
+      params:
+        hidden_size: 16
+        num_layers: 1
+        dropout: 0.49495257160771644
+    - name: cnn1d
+      params:
+        channels: [16]
+        kernel_size: 3
+        dropout: 0.49495257160771644
