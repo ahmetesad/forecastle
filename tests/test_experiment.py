@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pandas as pd
 
@@ -159,3 +161,57 @@ def test_run_experiment_trains_hybrid_models(tmp_path) -> None:
 
     assert (result.run_dir / "checkpoints" / "lstm_gru.pt").exists()
     assert (result.run_dir / "checkpoints" / "cnn_lstm.pt").exists()
+
+
+def test_model_predictions_do_not_depend_on_configuration_order(tmp_path) -> None:
+    csv_path = tmp_path / "prices.csv"
+    rows = 70
+    pd.DataFrame(
+        {
+            "Date": pd.date_range("2024-01-01", periods=rows),
+            "Close": np.linspace(100.0, 112.0, rows),
+        }
+    ).to_csv(csv_path, index=False)
+    models = [
+        ModelRunConfig(name="mlp", params={"hidden_sizes": [4]}),
+        ModelRunConfig(name="cnn1d", params={"channels": [4]}),
+    ]
+    config = AppConfig(
+        experiment=ExperimentConfig(name="forward", output_dir=tmp_path / "outputs", seed=17),
+        dataset=DatasetConfig(
+            name="synthetic",
+            csv_path=csv_path,
+            date_column="Date",
+            target_column="Close",
+            feature_columns=["Close"],
+            sequence_length=6,
+            horizon=1,
+        ),
+        training=TrainingConfig(
+            batch_size=8,
+            epochs=2,
+            patience=2,
+            models=models,
+        ),
+    )
+
+    forward = run_experiment(config)
+    reversed_result = run_experiment(
+        replace(
+            config,
+            experiment=replace(config.experiment, name="reversed"),
+            training=replace(config.training, models=list(reversed(models))),
+        )
+    )
+
+    for model in ["mlp", "cnn1d"]:
+        forward_predictions = pd.read_csv(
+            forward.run_dir / "predictions" / f"{model}_predictions.csv"
+        )
+        reversed_predictions = pd.read_csv(
+            reversed_result.run_dir / "predictions" / f"{model}_predictions.csv"
+        )
+        np.testing.assert_allclose(
+            forward_predictions["prediction"],
+            reversed_predictions["prediction"],
+        )

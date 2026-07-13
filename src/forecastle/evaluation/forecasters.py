@@ -118,8 +118,9 @@ def fit_all_forecasters(
         PersistenceForecaster(datamodule.target_transform, fold),
         LinearForecaster(datamodule, fold),
     ]
-    for model_index, model_config in enumerate(training_config.models):
-        seed_everything(seed + model_index)
+    for model_config in training_config.models:
+        seed_everything(seed)
+        reset_train_loader_seed(datamodule, seed)
         checkpoint_path = (
             checkpoint_dir / f"{model_config.name}.pt"
             if flat_checkpoints
@@ -136,6 +137,14 @@ def fit_all_forecasters(
             )
         )
     return forecasters
+
+
+def reset_train_loader_seed(datamodule: DataModule, seed: int) -> None:
+    generator = datamodule.train_loader.generator
+    if generator is None:
+        msg = "The training DataLoader must have a generator for reproducible model fitting."
+        raise ValueError(msg)
+    generator.manual_seed(seed)
 
 
 def scale_window(window: np.ndarray, datamodule: DataModule) -> np.ndarray:
