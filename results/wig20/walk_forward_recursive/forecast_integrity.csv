@@ -1,0 +1,11 @@
+model,rows,folds,min_horizon,max_horizon,duplicate_keys,finite_values
+cnn1d,741,38,1,20,0,True
+cnn_lstm,741,38,1,20,0,True
+dnfs,741,38,1,20,0,True
+gru,741,38,1,20,0,True
+linear_regression,741,38,1,20,0,True
+lstm,741,38,1,20,0,True
+lstm_gru,741,38,1,20,0,True
+mlp,741,38,1,20,0,True
+naive_persistence,741,38,1,20,0,True
+rnn,741,38,1,20,0,True

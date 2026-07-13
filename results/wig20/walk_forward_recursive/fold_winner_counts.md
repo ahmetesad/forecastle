@@ -1,0 +1,11 @@
+| model | fold_wins |
+| --- | --- |
+| mlp | 8 |
+| linear_regression | 7 |
+| gru | 6 |
+| cnn1d | 4 |
+| rnn | 4 |
+| naive_persistence | 4 |
+| dnfs | 3 |
+| lstm | 1 |
+| lstm_gru | 1 |
