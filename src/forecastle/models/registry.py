@@ -7,6 +7,7 @@ from torch import nn
 
 from forecastle.models.cnn import CNN1DRegressor
 from forecastle.models.dnfs import DNFSRegressor
+from forecastle.models.hybrid import CNNLSTMRegressor, LSTMGRURegressor
 from forecastle.models.mlp import MLPRegressor
 from forecastle.models.recurrent import GRURegressor, LSTMRegressor, RNNRegressor
 
@@ -37,6 +38,14 @@ def _build_dnfs(sequence_length: int, feature_count: int, params: dict[str, Any]
     return DNFSRegressor(sequence_length=sequence_length, feature_count=feature_count, **params)
 
 
+def _build_lstm_gru(_sequence_length: int, feature_count: int, params: dict[str, Any]) -> nn.Module:
+    return LSTMGRURegressor(feature_count=feature_count, **params)
+
+
+def _build_cnn_lstm(_sequence_length: int, feature_count: int, params: dict[str, Any]) -> nn.Module:
+    return CNNLSTMRegressor(feature_count=feature_count, **params)
+
+
 MODEL_REGISTRY: dict[str, ModelFactory] = {
     "mlp": _build_mlp,
     "rnn": _build_rnn,
@@ -44,6 +53,8 @@ MODEL_REGISTRY: dict[str, ModelFactory] = {
     "gru": _build_gru,
     "cnn1d": _build_cnn1d,
     "dnfs": _build_dnfs,
+    "lstm_gru": _build_lstm_gru,
+    "cnn_lstm": _build_cnn_lstm,
 }
 
 

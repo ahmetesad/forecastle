@@ -61,3 +61,17 @@ training:
       params:
         num_rules: 16
         dropout: 0.1
+    - name: lstm_gru
+      params:
+        lstm_hidden_size: 64
+        gru_hidden_size: 64
+        lstm_num_layers: 1
+        gru_num_layers: 1
+        dropout: 0.1
+    - name: cnn_lstm
+      params:
+        channels: [32, 64]
+        kernel_size: 3
+        lstm_hidden_size: 64
+        lstm_num_layers: 1
+        dropout: 0.1

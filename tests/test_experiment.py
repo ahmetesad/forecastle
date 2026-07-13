@@ -115,3 +115,47 @@ def test_run_experiment_trains_dnfs(tmp_path) -> None:
         "naive_persistence",
         "dnfs",
     }
+
+
+def test_run_experiment_trains_hybrid_models(tmp_path) -> None:
+    csv_path = tmp_path / "prices.csv"
+    rows = 70
+    values = np.linspace(100.0, 112.0, rows)
+    pd.DataFrame(
+        {
+            "Date": pd.date_range("2024-01-01", periods=rows),
+            "Close": values,
+        }
+    ).to_csv(csv_path, index=False)
+    config = AppConfig(
+        experiment=ExperimentConfig(name="hybrid_smoke", output_dir=tmp_path / "outputs", seed=9),
+        dataset=DatasetConfig(
+            name="synthetic",
+            csv_path=csv_path,
+            date_column="Date",
+            target_column="Close",
+            feature_columns=["Close"],
+            sequence_length=6,
+            horizon=1,
+        ),
+        training=TrainingConfig(
+            batch_size=8,
+            epochs=1,
+            patience=1,
+            models=[
+                ModelRunConfig(
+                    name="lstm_gru",
+                    params={"lstm_hidden_size": 4, "gru_hidden_size": 4},
+                ),
+                ModelRunConfig(
+                    name="cnn_lstm",
+                    params={"channels": [4], "lstm_hidden_size": 4},
+                ),
+            ],
+        ),
+    )
+
+    result = run_experiment(config)
+
+    assert (result.run_dir / "checkpoints" / "lstm_gru.pt").exists()
+    assert (result.run_dir / "checkpoints" / "cnn_lstm.pt").exists()

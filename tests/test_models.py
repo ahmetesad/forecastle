@@ -29,3 +29,28 @@ def test_registry_builds_dnfs() -> None:
     output = model(inputs)
 
     assert output.shape == (2, 1)
+
+
+def test_hybrid_models_support_forward_and_backward() -> None:
+    inputs = torch.randn(3, 10, 5)
+    for model_name in ["lstm_gru", "cnn_lstm"]:
+        model = build_model(model_name, sequence_length=10, feature_count=5)
+        output = model(inputs)
+        output.sum().backward()
+
+        assert output.shape == (3, 1)
+        assert all(parameter.grad is not None for parameter in model.parameters())
+
+
+def test_cnn_lstm_rejects_even_kernel_size() -> None:
+    try:
+        build_model(
+            "cnn_lstm",
+            sequence_length=10,
+            feature_count=5,
+            params={"kernel_size": 4},
+        )
+    except ValueError as error:
+        assert "positive odd" in str(error)
+    else:
+        raise AssertionError("Expected an even CNN-LSTM kernel to be rejected.")
