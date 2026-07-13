@@ -18,6 +18,20 @@ class DatasetBundle:
     feature_names: list[str]
     target_name: str
     target_prices: np.ndarray
+    indicator_history_prices: np.ndarray
+    warmup_rows: int
+
+
+@dataclass(frozen=True)
+class WindowedSamples:
+    features: np.ndarray
+    targets: np.ndarray
+    target_prices: np.ndarray
+    previous_prices: np.ndarray
+    origin_dates: np.ndarray
+    target_dates: np.ndarray
+    origin_indices: np.ndarray
+    target_indices: np.ndarray
 
 
 @dataclass(frozen=True)
@@ -42,3 +56,9 @@ class DataModule:
     horizon: int
     target_name: str
     target_transform: str
+    feature_mean: np.ndarray
+    feature_std: np.ndarray
+    val_target_dates: np.ndarray
+    test_target_dates: np.ndarray
+    val_origin_dates: np.ndarray
+    test_origin_dates: np.ndarray

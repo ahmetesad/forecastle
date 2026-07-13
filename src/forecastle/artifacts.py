@@ -54,6 +54,30 @@ def write_comparison(run_dir: Path, rows: list[dict[str, Any]]) -> None:
     (run_dir / "comparison.md").write_text(dataframe_to_markdown(frame), encoding="utf-8")
 
 
+def write_dataframe(path: Path, frame: pd.DataFrame) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_csv(path, index=False)
+    path.with_suffix(".md").write_text(dataframe_to_markdown(frame), encoding="utf-8")
+
+
+def plot_horizon_rmse(path: Path, frame: pd.DataFrame, title: str) -> None:
+    if frame.empty:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    figure, axis = plt.subplots(figsize=(10, 5))
+    for model, group in frame.groupby("model"):
+        ordered = group.sort_values("horizon_step")
+        axis.plot(ordered["horizon_step"], ordered["rmse"], marker="o", label=model)
+    axis.set_title(title)
+    axis.set_xlabel("Horizon step")
+    axis.set_ylabel("RMSE")
+    axis.grid(alpha=0.25)
+    axis.legend()
+    figure.tight_layout()
+    figure.savefig(path, dpi=150)
+    plt.close(figure)
+
+
 def dataframe_to_markdown(frame: pd.DataFrame) -> str:
     columns = [str(column) for column in frame.columns]
     lines = [

@@ -1,0 +1,89 @@
+experiment:
+  name: wig20_walk_forward_recursive
+  output_dir: outputs
+  seed: 42
+  device: auto
+
+dataset:
+  name: wig20
+  source: csv
+  csv_path: data/raw/wig20.csv
+  date_column: Date
+  target_column: Close
+  target_transform: log_return
+  feature_columns:
+    - Close
+  technical_indicators:
+    sma_periods: [5, 10, 15, 20]
+    rsi_period: 14
+    macd:
+      fast_period: 12
+      slow_period: 26
+      signal_period: 9
+  sequence_length: 30
+  horizon: 20
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  scale_features: true
+  scale_target: true
+  dropna: true
+
+forecasting:
+  strategy: recursive
+
+evaluation:
+  strategy: walk_forward
+  window: expanding
+  step_size: null
+  validation_size: null
+  train_window_size: null
+  max_folds: null
+
+training:
+  batch_size: 64
+  epochs: 50
+  learning_rate: 0.001
+  weight_decay: 0.0
+  patience: 8
+  num_workers: 0
+  models:
+    - name: mlp
+      params:
+        hidden_sizes: [128, 64]
+        dropout: 0.1
+    - name: rnn
+      params:
+        hidden_size: 64
+        num_layers: 1
+        dropout: 0.0
+    - name: lstm
+      params:
+        hidden_size: 64
+        num_layers: 1
+        dropout: 0.0
+    - name: gru
+      params:
+        hidden_size: 64
+        num_layers: 1
+        dropout: 0.0
+    - name: cnn1d
+      params:
+        channels: [32, 64]
+        kernel_size: 3
+        dropout: 0.1
+    - name: dnfs
+      params:
+        num_rules: 16
+        dropout: 0.1
+    - name: lstm_gru
+      params:
+        lstm_hidden_size: 64
+        gru_hidden_size: 64
+        dropout: 0.1
+    - name: cnn_lstm
+      params:
+        channels: [32, 64]
+        kernel_size: 3
+        lstm_hidden_size: 64
+        dropout: 0.1

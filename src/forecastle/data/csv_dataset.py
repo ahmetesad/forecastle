@@ -8,7 +8,8 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader
 
-from forecastle.data.types import DataModule, DatasetBundle
+from forecastle.data.indicators import add_technical_indicators
+from forecastle.data.types import DataModule, DatasetBundle, WindowedSamples
 from forecastle.data.window_dataset import WindowedTimeSeriesDataset
 
 if TYPE_CHECKING:
@@ -21,33 +22,68 @@ def build_csv_datamodule(
     seed: int,
 ) -> DataModule:
     bundle = load_csv_dataset(dataset_config)
-    windows, targets, target_prices, previous_prices = make_windows(
+    samples = make_windowed_samples(
         bundle,
         dataset_config.sequence_length,
         dataset_config.horizon,
         dataset_config.target_transform,
     )
-    baseline_predictions = make_baseline_predictions(targets, previous_prices, dataset_config)
-    train_slice, val_slice, test_slice = split_slices(len(windows), dataset_config)
+    train_slice, val_slice, test_slice = split_slices(len(samples.features), dataset_config)
+    return build_datamodule_from_samples(
+        samples,
+        dataset_config,
+        training_config,
+        seed,
+        train_slice,
+        val_slice,
+        test_slice,
+        target_name=bundle.target_name,
+    )
 
-    train_x = windows[train_slice]
-    val_x = windows[val_slice]
-    test_x = windows[test_slice]
-    train_y = targets[train_slice]
-    val_y = targets[val_slice]
-    test_y = targets[test_slice]
-    val_actuals = targets[val_slice].copy()
-    test_actuals = targets[test_slice].copy()
+
+def build_datamodule_from_samples(
+    samples: WindowedSamples,
+    dataset_config: DatasetConfig,
+    training_config: TrainingConfig,
+    seed: int,
+    train_indices: slice | np.ndarray,
+    val_indices: slice | np.ndarray,
+    test_indices: slice | np.ndarray,
+    target_name: str | None = None,
+) -> DataModule:
+    windows = samples.features
+    targets = samples.targets
+    baseline_predictions = make_baseline_predictions(
+        targets,
+        samples.previous_prices,
+        dataset_config,
+    )
+
+    train_x = windows[train_indices].copy()
+    val_x = windows[val_indices].copy()
+    test_x = windows[test_indices].copy()
+    train_y = targets[train_indices].copy()
+    val_y = targets[val_indices].copy()
+    test_y = targets[test_indices].copy()
+    val_actuals = targets[val_indices].copy()
+    test_actuals = targets[test_indices].copy()
+    if not len(train_x) or not len(val_x) or not len(test_x):
+        msg = "Train, validation, and test samples must all be non-empty."
+        raise ValueError(msg)
 
     feature_scaler = StandardScaler()
     target_scaler = StandardScaler()
 
+    feature_mean = np.zeros(windows.shape[-1], dtype=np.float64)
+    feature_std = np.ones(windows.shape[-1], dtype=np.float64)
     if dataset_config.scale_features:
         flat_train = train_x.reshape(-1, train_x.shape[-1])
         feature_scaler.fit(flat_train)
         train_x = _transform_windows(feature_scaler, train_x)
         val_x = _transform_windows(feature_scaler, val_x)
         test_x = _transform_windows(feature_scaler, test_x)
+        feature_mean = feature_scaler.mean_.copy()
+        feature_std = feature_scaler.scale_.copy()
 
     target_mean = 0.0
     target_std = 1.0
@@ -93,17 +129,23 @@ def build_csv_datamodule(
         target_mean=target_mean,
         target_std=target_std,
         val_actuals=val_actuals,
-        val_target_prices=target_prices[val_slice],
-        val_previous_prices=previous_prices[val_slice],
+        val_target_prices=samples.target_prices[val_indices],
+        val_previous_prices=samples.previous_prices[val_indices],
         test_actuals=test_actuals,
-        test_baseline_predictions=baseline_predictions[test_slice],
-        test_target_prices=target_prices[test_slice],
-        test_previous_prices=previous_prices[test_slice],
+        test_baseline_predictions=baseline_predictions[test_indices],
+        test_target_prices=samples.target_prices[test_indices],
+        test_previous_prices=samples.previous_prices[test_indices],
         feature_count=windows.shape[-1],
         sequence_length=dataset_config.sequence_length,
         horizon=dataset_config.horizon,
-        target_name=bundle.target_name,
+        target_name=target_name or dataset_config.target_column,
         target_transform=dataset_config.target_transform,
+        feature_mean=feature_mean,
+        feature_std=feature_std,
+        val_target_dates=samples.target_dates[val_indices],
+        test_target_dates=samples.target_dates[test_indices],
+        val_origin_dates=samples.origin_dates[val_indices],
+        test_origin_dates=samples.origin_dates[test_indices],
     )
 
 
@@ -123,16 +165,25 @@ def load_csv_dataset(config: DatasetConfig) -> DatasetBundle:
         raise ValueError(msg)
 
     frame[config.date_column] = pd.to_datetime(frame[config.date_column])
-    frame = frame.sort_values(config.date_column)
+    frame = frame.sort_values(config.date_column).reset_index(drop=True)
     if config.dropna:
-        frame = frame.dropna(subset=list(required_columns))
+        frame = frame.dropna(subset=list(required_columns)).reset_index(drop=True)
 
-    feature_names = config.feature_columns or [
+    base_feature_names = config.feature_columns or [
         column
         for column in frame.columns
         if column not in {config.date_column, config.target_column}
         and pd.api.types.is_numeric_dtype(frame[column])
     ]
+    indicator_history_prices = frame[config.target_column].to_numpy(dtype=np.float32)
+    frame, indicator_names = add_technical_indicators(
+        frame,
+        config.target_column,
+        config.technical_indicators,
+    )
+    warmup_rows = int(frame.index[0]) if len(frame) else 0
+    frame = frame.reset_index(drop=True)
+    feature_names = [*base_feature_names, *indicator_names]
     prices = frame[config.target_column].to_numpy(dtype=np.float32)
     features = frame[feature_names].to_numpy(dtype=np.float32)
     targets = _make_targets(prices, config.target_transform)
@@ -144,6 +195,8 @@ def load_csv_dataset(config: DatasetConfig) -> DatasetBundle:
         feature_names=feature_names,
         target_name=_target_name(config.target_column, config.target_transform),
         target_prices=prices,
+        indicator_history_prices=indicator_history_prices,
+        warmup_rows=warmup_rows,
     )
 
 
@@ -153,6 +206,21 @@ def make_windows(
     horizon: int,
     target_transform: str = "price",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    samples = make_windowed_samples(bundle, sequence_length, horizon, target_transform)
+    return (
+        samples.features,
+        samples.targets,
+        samples.target_prices,
+        samples.previous_prices,
+    )
+
+
+def make_windowed_samples(
+    bundle: DatasetBundle,
+    sequence_length: int,
+    horizon: int,
+    target_transform: str = "price",
+) -> WindowedSamples:
     max_start = len(bundle.features) - sequence_length - horizon + 1
     if max_start <= 0:
         msg = "Dataset is too short for the configured sequence_length and horizon."
@@ -162,6 +230,10 @@ def make_windows(
     targets = []
     target_prices = []
     previous_prices = []
+    origin_dates = []
+    target_dates = []
+    origin_indices = []
+    target_indices = []
     for start in range(max_start):
         end = start + sequence_length
         target_index = end + horizon - 1
@@ -172,11 +244,19 @@ def make_windows(
         targets.append(make_window_target(previous_price, target_price, target_transform))
         target_prices.append(target_price)
         previous_prices.append(previous_price)
-    return (
-        np.asarray(features, dtype=np.float32),
-        np.asarray(targets, dtype=np.float32),
-        np.asarray(target_prices, dtype=np.float32),
-        np.asarray(previous_prices, dtype=np.float32),
+        origin_dates.append(bundle.dates[previous_index])
+        target_dates.append(bundle.dates[target_index])
+        origin_indices.append(previous_index)
+        target_indices.append(target_index)
+    return WindowedSamples(
+        features=np.asarray(features, dtype=np.float32),
+        targets=np.asarray(targets, dtype=np.float32),
+        target_prices=np.asarray(target_prices, dtype=np.float32),
+        previous_prices=np.asarray(previous_prices, dtype=np.float32),
+        origin_dates=np.asarray(origin_dates),
+        target_dates=np.asarray(target_dates),
+        origin_indices=np.asarray(origin_indices, dtype=np.int64),
+        target_indices=np.asarray(target_indices, dtype=np.int64),
     )
 
 
