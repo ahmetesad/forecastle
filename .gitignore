@@ -6,7 +6,10 @@ __pycache__/
 *.egg-info/
 dist/
 outputs/
-data/raw/
+data/raw/*
+!data/raw/wig20.csv
+!data/raw/sp500.csv
+!data/raw/bist100.csv
 data/processed/
 *.db
 *.sqlite

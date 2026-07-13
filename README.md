@@ -8,11 +8,13 @@ Experiments are configured with YAML, seeded for reproducibility, and write chec
 predictions, plots, metrics, and comparison tables under `outputs/`. The default WIG20
 example predicts log returns and includes a naive persistence baseline.
 
+See [`STATUS.md`](STATUS.md) for implemented capabilities, curated findings, known limitations,
+and the next research tasks.
+
 ## Quick start
 
 ```bash
-uv sync --dev
-uv run forecastle download --dataset sp500
+uv sync --frozen --dev
 uv run forecastle run --config configs/example.yaml
 ```
 
@@ -54,6 +56,23 @@ The preset symbols are:
 Downloaded CSVs contain the columns expected by the example dataset configs:
 `Date`, `Open`, `High`, `Low`, `Close`, optional `Adj Close`, and `Volume`.
 
+## Included research datasets
+
+The repository includes the exact CSV snapshots used by the existing experiment configs. Market
+data would normally remain outside version control and be downloaded locally. These snapshots are
+committed specifically because Forecastle is a research project being shared with collaborators;
+including them makes it easier for everyone to run the same experiments against identical inputs.
+
+| Dataset | File | Source | Coverage | Rows | SHA-256 |
+| --- | --- | --- | --- | ---: | --- |
+| WIG20 | `data/raw/wig20.csv` | Stooq daily CSV | 2006-07-07 to 2026-07-06 | 4,999 | `2068449fa9044aae9b8dd670428feb5e3e2fb7c35207f8d46027f83ee2cf5ce4` |
+| S&P 500 | `data/raw/sp500.csv` | Yahoo Finance (`^GSPC`) | 2000-01-03 to 2026-07-08 | 6,667 | `973bb1b4c920de56183ef6404fdce8fa6bb7a5141263797a39139bcbfcd290c2` |
+| BIST100 | `data/raw/bist100.csv` | Yahoo Finance (`XU100.IS`) | 2000-01-04 to 2026-07-08 | 6,631 | `73bebf639bf279a1d795e70709709369f3cb6951b64b976067c12a77b76d2aa9` |
+
+Running a downloader command can
+replace a snapshot with newer or provider-adjusted data and therefore change experiment results.
+Use the committed files when reproducing the published tables.
+
 ## Project layout
 
 ```text
@@ -61,19 +80,19 @@ configs/              Example experiment and dataset configs
 src/forecastle/       Package source
 tests/                Focused unit tests
 outputs/              Experiment artifacts, ignored by git
-data/raw/             Local financial CSV files, ignored by git
+data/raw/             Committed research snapshots
 ```
 
 ## Adding a dataset
 
-1. Download or put a CSV in `data/raw/`, for example `data/raw/sp500.csv`.
+1. Download or put a CSV in `data/raw/`; the three built-in datasets are already included.
 2. Add a dataset YAML file under `configs/datasets/`.
 3. Reference that dataset from an experiment YAML.
 
 The built-in CSV loader handles sorting by date, feature selection, scaling, rolling windows,
 and train/validation/test splits.
 
-## Supported initial models
+## Supported models
 
 - MLP
 - RNN
@@ -81,6 +100,8 @@ and train/validation/test splits.
 - GRU
 - 1D CNN
 - DNFS baseline
+- LSTM-GRU (`LSTM -> GRU -> linear head`)
+- CNN-LSTM (`Conv1d -> LSTM -> linear head`)
 
 ## Generated artifacts
 
@@ -99,6 +120,85 @@ The comparison includes two non-neural baselines:
   return is zero.
 - `linear_regression`: flattened lookback windows fit with ordinary least squares on the
   training split only.
+
+## Evaluation strategies
+
+The default remains the original chronological train/validation/test holdout. Enable
+walk-forward evaluation explicitly:
+
+```yaml
+evaluation:
+  strategy: walk_forward
+  window: expanding  # or rolling
+  step_size: null     # defaults to dataset.horizon
+  validation_size: null
+  train_window_size: null
+  max_folds: null
+```
+
+Each fold ends at a forecast origin representing the last observed date. Forecastle fits fresh
+training-only scalers and fresh neural models, uses the latest historical block for validation,
+forecasts the next block, and advances. Expanding windows retain all older training data; rolling
+windows retain a fixed training history. Use `max_folds` for development and smoke runs.
+
+Run the included examples:
+
+```bash
+uv run forecastle run --config configs/evaluation/wig20_walk_forward_recursive.yaml
+uv run forecastle run --config configs/evaluation/wig20_rolling_recursive.yaml
+uv run forecastle run --config configs/evaluation/wig20_walk_forward_recursive_smoke.yaml
+```
+
+## Direct and recursive forecasting
+
+Direct forecasting is the backward-compatible default and predicts only the endpoint at `t+h`.
+Recursive forecasting trains a one-step model and feeds each prediction into the next input:
+
+```yaml
+forecasting:
+  strategy: recursive
+```
+
+For simple returns, prices are reconstructed as `P(t+1) = P(t) * (1 + return)`. For log returns,
+Forecastle uses `P(t+1) = P(t) * exp(log_return)`. Persistence predicts the last Close for price
+targets and zero for return targets, then follows the same reconstruction path.
+
+True future OHLCV values do not exist during recursive inference. Recursive configs therefore
+accept only `feature_columns: [Close]` plus generated Close-derived indicators. Forecastle rejects
+recursive OHLCV or exogenous-feature configs instead of silently leaking future information.
+
+## Technical indicators
+
+Configure causal Close-derived features under the dataset:
+
+```yaml
+technical_indicators:
+  sma_periods: [5, 10, 15, 20]
+  rsi_period: 14
+  macd:
+    fast_period: 12
+    slow_period: 26
+    signal_period: 9
+```
+
+This adds trailing SMAs, Wilder-style RSI, and the MACD line, signal, and histogram. Indicator
+warm-up rows are removed before split boundaries are calculated. Every fold still fits feature and
+target scalers on its training portion only.
+
+## Walk-forward artifacts
+
+Walk-forward runs preserve the normal comparison and per-model outputs and additionally write:
+
+- `folds.csv` and `folds.md`
+- `fold_metrics.csv` and `fold_metrics.md`
+- `horizon_metrics.csv` and `horizon_metrics.md`
+- `fit_summaries.csv` and `fit_summaries.md`
+- `plots/horizon_rmse.png`
+- fold checkpoints under `checkpoints/<model>/`
+
+Prediction files are long-form and uniquely keyed by model, fold, forecast origin, target date, and
+horizon step. Direct forecasts contain only the configured endpoint; recursive forecasts contain
+every generated step.
 
 ## DNFS baseline
 
