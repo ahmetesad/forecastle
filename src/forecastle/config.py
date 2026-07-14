@@ -12,6 +12,7 @@ TuningMetric = Literal["rmse", "price_rmse"]
 ForecastStrategy = Literal["direct", "recursive"]
 EvaluationStrategy = Literal["holdout", "walk_forward"]
 WindowStrategy = Literal["expanding", "rolling"]
+BaselineName = Literal["naive_persistence", "linear_regression"]
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,9 @@ class TrainingConfig:
     patience: int = 8
     num_workers: int = 0
     models: list[ModelRunConfig] = field(default_factory=list)
+    baselines: list[BaselineName] = field(
+        default_factory=lambda: ["naive_persistence", "linear_regression"]
+    )
 
 
 @dataclass(frozen=True)
@@ -129,8 +133,8 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
     tuning = _parse_tuning(raw.get("tuning", {}))
     forecasting = _parse_forecasting(raw.get("forecasting", {}))
     evaluation = _parse_evaluation(raw.get("evaluation", {}))
-    if not training.models:
-        msg = "At least one model must be configured under training.models."
+    if not training.models and not training.baselines:
+        msg = "At least one model or baseline must be configured under training."
         raise ValueError(msg)
     _validate_ratios(dataset)
     _validate_tuning(tuning)
@@ -214,6 +218,15 @@ def _parse_training(raw: dict[str, Any]) -> TrainingConfig:
         ModelRunConfig(name=str(item["name"]), params=dict(item.get("params", {})))
         for item in model_items
     ]
+    baseline_items = raw.get("baselines", ["naive_persistence", "linear_regression"])
+    baselines = [str(name) for name in baseline_items]
+    unknown_baselines = sorted(set(baselines) - {"naive_persistence", "linear_regression"})
+    if unknown_baselines:
+        msg = f"Unknown training baselines: {', '.join(unknown_baselines)}."
+        raise ValueError(msg)
+    if len(baselines) != len(set(baselines)):
+        msg = "training.baselines must not contain duplicates."
+        raise ValueError(msg)
     return TrainingConfig(
         batch_size=int(raw.get("batch_size", 64)),
         epochs=int(raw.get("epochs", 50)),
@@ -222,6 +235,7 @@ def _parse_training(raw: dict[str, Any]) -> TrainingConfig:
         patience=int(raw.get("patience", 8)),
         num_workers=int(raw.get("num_workers", 0)),
         models=models,
+        baselines=baselines,  # type: ignore[arg-type]
     )
 
 

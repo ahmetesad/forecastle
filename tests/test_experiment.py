@@ -119,6 +119,33 @@ def test_run_experiment_trains_dnfs(tmp_path) -> None:
     }
 
 
+def test_run_experiment_supports_one_explicit_baseline(tmp_path) -> None:
+    csv_path = tmp_path / "prices.csv"
+    pd.DataFrame(
+        {
+            "Date": pd.date_range("2024-01-01", periods=70),
+            "Close": np.linspace(100.0, 112.0, 70),
+        }
+    ).to_csv(csv_path, index=False)
+    config = AppConfig(
+        experiment=ExperimentConfig(name="baseline_only", output_dir=tmp_path / "outputs"),
+        dataset=DatasetConfig(
+            name="synthetic",
+            csv_path=csv_path,
+            date_column="Date",
+            target_column="Close",
+            feature_columns=["Close"],
+            sequence_length=6,
+        ),
+        training=TrainingConfig(models=[], baselines=["naive_persistence"]),
+    )
+
+    result = run_experiment(config)
+
+    assert {row["model"] for row in result.comparison_rows} == {"naive_persistence"}
+    assert (result.run_dir / "metrics" / "naive_persistence_metrics.yaml").exists()
+
+
 def test_run_experiment_trains_hybrid_models(tmp_path) -> None:
     csv_path = tmp_path / "prices.csv"
     rows = 70

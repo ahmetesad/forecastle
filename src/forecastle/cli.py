@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from forecastle.batch import run_batch
 from forecastle.config import load_config
 from forecastle.data.downloader import DownloadRequest, download_prices, download_prices_from_config
 from forecastle.experiment import run_experiment
@@ -16,6 +17,22 @@ def main() -> None:
 
     run_parser = subparsers.add_parser("run", help="Run an experiment from a YAML config.")
     run_parser.add_argument("--config", required=True, type=Path, help="Path to YAML config.")
+
+    batch_parser = subparsers.add_parser(
+        "batch", help="Run or resume a batch of experiments from YAML."
+    )
+    batch_parser.add_argument(
+        "--config",
+        required=True,
+        type=Path,
+        help="Path to batch YAML config.",
+    )
+    batch_parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of stable batch runs to consider.",
+    )
 
     sweep_parser = subparsers.add_parser("sweep", help="Run an experiment sweep from YAML.")
     sweep_parser.add_argument(
@@ -78,6 +95,9 @@ def main() -> None:
         config = load_config(args.config)
         result = run_experiment(config)
         print(f"Wrote experiment artifacts to {result.run_dir}")
+    elif args.command == "batch":
+        batch_dir = run_batch(args.config, limit=args.limit)
+        print(f"Wrote batch artifacts to {batch_dir}")
     elif args.command == "sweep":
         sweep_dir = run_sweep(args.config, limit=args.limit)
         print(f"Wrote sweep artifacts to {sweep_dir}")

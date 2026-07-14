@@ -19,6 +19,7 @@ The repository currently has:
 - Causal SMA, RSI, and MACD features with indicator warm-up removal.
 - Aggregate, per-fold, and per-horizon metrics, long-form predictions, plots, and checkpoints.
 - YAML experiment definitions, parameter sweeps, and resumable Optuna tuning.
+- Stable-ID, resumable batch experiments with cross-run summaries and plots.
 - Yahoo Finance downloads for WIG20, BIST100, and S&P 500 presets.
 
 Existing holdout configurations keep their original behavior. Walk-forward evaluation, recursive forecasting, and technical indicators are enabled only when their configuration sections request them. Recursive forecasting intentionally accepts only Close and Close-derived indicators because future OHLCV or exogenous observations are unavailable at inference time.
@@ -91,6 +92,7 @@ regenerated artifacts.
 4. Reproduce the canonical protocol on BIST100 and S&P 500 and test parameter transfer.
 5. Add uncertainty estimates or statistical tests across folds and seeds.
 6. Consider parallel fold/trial execution after reproducibility guarantees are preserved.
+7. Run and curate the configured three-market, two-feature, five-seed batch study.
 
 ## Useful commands
 

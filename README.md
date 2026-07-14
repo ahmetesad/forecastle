@@ -299,3 +299,85 @@ uv run forecastle download --dataset sp500
 uv run forecastle download --dataset bist100
 uv run forecastle sweep --config configs/sweeps/markets_lookbacks_horizons.yaml
 ```
+
+## Batch experiments
+
+Batch experiments run independently resumable, single-model configurations and aggregate their
+results across markets, feature sets, and seeds. The first large study contains 180 runs:
+
+- Markets: WIG20, S&P 500, and BIST100.
+- Models: persistence, linear regression, CNN1D, MLP, LSTM-GRU, and DNFS.
+- Features: Close only and Close with SMA/RSI/MACD.
+- Seeds: `1`, `7`, `42`, `123`, and `2026`.
+- Expanding walk-forward evaluation with recursive horizon-20 forecasting.
+
+Run or resume it locally:
+
+```bash
+uv sync --frozen --dev
+uv run forecastle batch --config configs/batches/markets_indicators_recursive_h20.yaml
+```
+
+The command is resume-safe. Successful runs are validated and skipped; failed or interrupted runs
+are attempted again. Use `--limit 1` for a quick orchestration check. Run IDs are deterministic and
+include every varied batch dimension, for example
+`wig20__cnn1d__close__seed42`.
+
+The stable output directory is
+`outputs/batches/markets_indicators_recursive_h20/`:
+
+```text
+batch_config.yaml
+study_metadata.yaml
+planned_runs.csv
+runs/<stable-run-id>/config.yaml
+runs/<stable-run-id>/metadata.yaml
+runs/<stable-run-id>/artifacts/<timestamp>/...
+run_results.csv
+aggregate_metrics.csv
+model_rankings.csv
+indicator_effects.csv
+cross_market_comparison.csv
+aggregate_horizon_metrics.csv
+seed_stability.csv
+plots/
+```
+
+Every CSV summary also has a Markdown counterpart. Run metadata records status, exact config hash,
+dataset hash, Git revision, package versions, timing, and the selected artifact directory. Study
+plots cover model ranking, indicator effects, cross-market performance, per-horizon performance,
+and seed stability.
+
+### Kaggle
+
+In a Kaggle notebook with internet access, use a persistent working directory and let `uv` provide
+Python 3.12 when the notebook image does not already have it:
+
+```python
+!git clone https://github.com/ahmetesad/forecastle.git
+%cd forecastle
+!pip install -q uv
+!uv python install 3.12
+!uv sync --frozen --python 3.12
+!uv run forecastle batch --config configs/batches/markets_indicators_recursive_h20.yaml
+```
+
+Kaggle sessions are finite, so archive or save the stable batch directory as a notebook output.
+Restoring that directory before rerunning preserves resume state.
+
+### Colab
+
+The same workflow runs in Colab:
+
+```python
+!git clone https://github.com/ahmetesad/forecastle.git
+%cd forecastle
+!pip install -q uv
+!uv python install 3.12
+!uv sync --frozen --python 3.12
+!uv run forecastle batch --config configs/batches/markets_indicators_recursive_h20.yaml
+```
+
+For runs that span multiple Colab sessions, copy
+`outputs/batches/markets_indicators_recursive_h20/` to mounted Google Drive at the end of a session
+and restore it to the same path before resuming.

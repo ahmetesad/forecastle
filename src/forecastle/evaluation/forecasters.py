@@ -114,10 +114,11 @@ def fit_all_forecasters(
     seed: int,
     flat_checkpoints: bool = False,
 ) -> list[FittedForecaster]:
-    forecasters: list[FittedForecaster] = [
-        PersistenceForecaster(datamodule.target_transform, fold),
-        LinearForecaster(datamodule, fold),
-    ]
+    forecasters: list[FittedForecaster] = []
+    if "naive_persistence" in training_config.baselines:
+        forecasters.append(PersistenceForecaster(datamodule.target_transform, fold))
+    if "linear_regression" in training_config.baselines:
+        forecasters.append(LinearForecaster(datamodule, fold))
     for model_config in training_config.models:
         seed_everything(seed)
         reset_train_loader_seed(datamodule, seed)
