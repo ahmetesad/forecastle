@@ -348,6 +348,9 @@ dataset hash, Git revision, package versions, timing, and the selected artifact 
 plots cover model ranking, indicator effects, cross-market performance, per-horizon performance,
 and seed stability.
 
+Forecastle uses Matplotlib's non-interactive `Agg` backend for file artifacts, including when
+Kaggle or Colab exports a notebook backend that is unavailable inside the isolated `uv` environment.
+
 ### Kaggle
 
 In a Kaggle notebook with internet access, use a persistent working directory and let `uv` provide

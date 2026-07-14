@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-import matplotlib.pyplot as plt
 import pandas as pd
 import yaml
+
+from forecastle.plotting import plt
 
 if TYPE_CHECKING:
     from pathlib import Path

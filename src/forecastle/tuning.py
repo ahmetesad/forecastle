@@ -4,7 +4,6 @@ from dataclasses import asdict, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import matplotlib.pyplot as plt
 import optuna
 from optuna.importance import get_param_importances
 
@@ -12,6 +11,7 @@ from forecastle.artifacts import dataframe_to_markdown, write_yaml
 from forecastle.data import build_datamodule
 from forecastle.experiment import make_run_dir, reconstruct_prices, resolve_device, unscale
 from forecastle.models import build_model
+from forecastle.plotting import plt
 from forecastle.training import Trainer, compute_metrics
 from forecastle.utils.seed import seed_everything
 
