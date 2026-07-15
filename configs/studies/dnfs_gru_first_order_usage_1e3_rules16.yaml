@@ -1,0 +1,57 @@
+experiment:
+  name: dnfs_usage_1e3_rules16
+  output_dir: outputs/studies/dnfs_rule_count_ablation
+  seed: 42
+  device: auto
+
+dataset:
+  name: wig20
+  source: csv
+  csv_path: data/raw/wig20.csv
+  date_column: Date
+  target_column: Close
+  target_transform: log_return
+  feature_columns: [Close]
+  technical_indicators:
+    sma_periods: [5, 10, 15, 20]
+    rsi_period: 14
+    macd: {fast_period: 12, slow_period: 26, signal_period: 9}
+  sequence_length: 30
+  horizon: 20
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  scale_features: true
+  scale_target: true
+  dropna: true
+
+forecasting: {strategy: recursive}
+evaluation: {strategy: walk_forward, window: expanding, step_size: 20, max_folds: 5}
+
+training:
+  batch_size: 64
+  epochs: 20
+  learning_rate: 0.001
+  weight_decay: 0.0
+  patience: 4
+  num_workers: 0
+  baselines: [naive_persistence]
+  models:
+    - name: dnfs
+      params:
+        encoder_type: gru
+        encoder_hidden_size: 64
+        encoder_num_layers: 1
+        latent_size: 32
+        num_rules: 16
+        strength_reduction: mean
+        rule_temperature: 1.0
+        min_width: 0.05
+        max_width: 5.0
+        consequent_type: first_order
+        encoder_dropout: 0.0
+        antecedent_dropout: 0.0
+        consequent_dropout: 0.0
+        rule_initialization: kmeans
+        usage_regularization: 0.001
+        gating: softmax

@@ -27,6 +27,10 @@ from forecastle.evaluation.metrics import (
     records_to_frame,
     summarize_forecasts,
 )
+from forecastle.evaluation.rule_analysis import (
+    drain_rule_activation_rows,
+    write_rule_activation_artifacts,
+)
 from forecastle.evaluation.types import ExperimentResult, FitSummary, ForecastRecord
 
 if TYPE_CHECKING:
@@ -70,6 +74,7 @@ def run_walk_forward(config: AppConfig) -> ExperimentResult:
     records: list[ForecastRecord] = []
     summaries: list[FitSummary] = []
     fold_rows: list[dict[str, Any]] = []
+    rule_activation_rows: list[dict[str, Any]] = []
 
     for fold in folds:
         datamodule = build_datamodule_from_samples(
@@ -81,6 +86,7 @@ def run_walk_forward(config: AppConfig) -> ExperimentResult:
             fold.val_indices,
             np.asarray([fold.forecast_sample_index]),
             target_name=bundle.target_name,
+            feature_names=bundle.feature_names,
         )
         forecasters = fit_all_forecasters(
             datamodule,
@@ -109,6 +115,7 @@ def run_walk_forward(config: AppConfig) -> ExperimentResult:
                     fold.number,
                 )
             records.extend(model_records)
+            rule_activation_rows.extend(drain_rule_activation_rows(forecaster, model_records))
             summaries.append(forecaster.summary)
         fold_rows.append(fold_to_dict(fold, samples, bundle, config.dataset))
 
@@ -122,6 +129,7 @@ def run_walk_forward(config: AppConfig) -> ExperimentResult:
         fold_metrics,
         horizon_metrics,
         fold_rows,
+        rule_activation_rows,
     )
     return ExperimentResult(run_dir=run_dir, comparison_rows=comparison_rows)
 
@@ -204,6 +212,7 @@ def write_walk_forward_artifacts(
     fold_metrics: pd.DataFrame,
     horizon_metrics: pd.DataFrame,
     fold_rows: list[dict[str, Any]],
+    rule_activation_rows: list[dict[str, Any]] | None = None,
 ) -> None:
     forecast_frame = records_to_frame(records)
     for model, group in forecast_frame.groupby("model", sort=True):
@@ -227,6 +236,7 @@ def write_walk_forward_artifacts(
         horizon_metrics,
         title=f"{dataset_name} - RMSE by forecast horizon",
     )
+    write_rule_activation_artifacts(run_dir, rule_activation_rows or [])
 
 
 def _slice_start(value: slice) -> int:

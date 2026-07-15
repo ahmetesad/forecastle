@@ -15,6 +15,7 @@ from forecastle.evaluation.common import make_run_dir, resolve_device
 from forecastle.evaluation.forecasters import fit_all_forecasters
 from forecastle.evaluation.forecasting import forecast_recursive, format_date
 from forecastle.evaluation.metrics import summarize_forecasts
+from forecastle.evaluation.rule_analysis import drain_rule_activation_rows
 from forecastle.evaluation.types import ExperimentResult, FitSummary, ForecastRecord
 from forecastle.evaluation.walk_forward import write_walk_forward_artifacts
 
@@ -41,6 +42,7 @@ def run_recursive_holdout(config: AppConfig) -> ExperimentResult:
         val_slice,
         test_slice,
         target_name=bundle.target_name,
+        feature_names=bundle.feature_names,
     )
     run_dir = make_run_dir(config.experiment.output_dir, config.experiment.name)
     forecasters = fit_all_forecasters(
@@ -57,14 +59,17 @@ def run_recursive_holdout(config: AppConfig) -> ExperimentResult:
     step_size = config.evaluation.step_size or config.dataset.horizon
     records: list[ForecastRecord] = []
     fold_rows = []
+    rule_activation_rows = []
     fold = 0
     while origin_index < len(bundle.target_prices) - 1:
         if config.evaluation.max_folds is not None and fold >= config.evaluation.max_folds:
             break
         for forecaster in forecasters:
-            records.extend(
-                forecast_recursive(forecaster, bundle, origin_index, config.dataset, fold)
+            model_records = forecast_recursive(
+                forecaster, bundle, origin_index, config.dataset, fold
             )
+            records.extend(model_records)
+            rule_activation_rows.extend(drain_rule_activation_rows(forecaster, model_records))
         final_index = min(origin_index + config.dataset.horizon, len(bundle.dates) - 1)
         fold_rows.append(
             {
@@ -89,6 +94,7 @@ def run_recursive_holdout(config: AppConfig) -> ExperimentResult:
         fold_metrics,
         horizon_metrics,
         fold_rows,
+        rule_activation_rows,
     )
     pd.DataFrame(fold_rows).to_csv(run_dir / "holdout_origins.csv", index=False)
     return ExperimentResult(run_dir=run_dir, comparison_rows=comparison_rows)

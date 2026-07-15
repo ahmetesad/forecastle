@@ -31,11 +31,13 @@ class Trainer:
         config: TrainingConfig,
         device: torch.device,
         checkpoint_path: Path,
+        seed: int = 0,
     ) -> None:
         self.model = model.to(device)
         self.config = config
         self.device = device
         self.checkpoint_path = checkpoint_path
+        self.seed = seed
         self.loss_fn = nn.MSELoss()
         self.optimizer = torch.optim.AdamW(
             model.parameters(),
@@ -49,6 +51,9 @@ class Trainer:
         val_loader: DataLoader,
         after_validation: Callable[[int, float], None] | None = None,
     ) -> FitResult:
+        initialize = getattr(self.model, "initialize_from_training_data", None)
+        if callable(initialize):
+            initialize(train_loader, self.device, self.seed)
         best_val_loss = float("inf")
         epochs_without_improvement = 0
         start = time.perf_counter()
@@ -111,6 +116,9 @@ class Trainer:
             self.optimizer.zero_grad(set_to_none=True)
             predictions = self.model(features)
             loss = self.loss_fn(predictions, targets)
+            regularization = getattr(self.model, "regularization_loss", None)
+            if callable(regularization):
+                loss = loss + regularization()
             loss.backward()
             self.optimizer.step()
 

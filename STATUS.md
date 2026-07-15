@@ -1,6 +1,6 @@
 # Forecastle Project Status
 
-Last updated: 2026-07-13
+Last updated: 2026-07-15
 
 ## Summary
 
@@ -20,6 +20,8 @@ The repository currently has:
 - Aggregate, per-fold, and per-horizon metrics, long-form predictions, plots, and checkpoints.
 - YAML experiment definitions, parameter sweeps, and resumable Optuna tuning.
 - Stable-ID, resumable batch experiments with cross-run summaries and plots.
+- Temporal DNFS encoders, Gaussian fuzzy rules, configurable TSK consequents, training-only
+  K-means initialization, rule diagnostics, usage regularization, top-k gating, and optional pruning.
 - Yahoo Finance downloads for WIG20, BIST100, and S&P 500 presets.
 
 Existing holdout configurations keep their original behavior. Walk-forward evaluation, recursive forecasting, and technical indicators are enabled only when their configuration sections request them. Recursive forecasting intentionally accepts only Close and Close-derived indicators because future OHLCV or exogenous observations are unavailable at inference time.
@@ -63,6 +65,20 @@ Return-space MAPE is retained only as a diagnostic because percentage errors bec
 actual returns approach zero. It is not used to rank models. Negative R-squared values are possible
 and should be read as performance below a constant-mean predictor, not as an implementation error.
 
+### WIG20 temporal DNFS ablation
+
+A matched five-seed study compared usage-regularization coefficients and rule counts for a GRU
+DNFS with first-order TSK consequents. `usage_regularization=1e-3` reduced mean price RMSE from
+103.893 to 100.785, improved four of five paired seeds, and reduced seed standard deviation from
+7.971 to 5.760. Its gains were strongest at recursive horizons 5-20; rule balance itself had only a
+weak relationship with accuracy.
+
+At `1e-3`, 8 rules outperformed 4 rules in four of five seeds and at horizons 2-20. Sixteen rules
+lost to 8 in every seed and left about nine rules below 1% mean usage. The current DNFS default is
+therefore GRU + first-order consequents + 8 rules + `usage_regularization=1e-3`. Full design notes,
+curated tables, and plots are under
+[`results/wig20/dnfs_ablation/`](results/wig20/dnfs_ablation/).
+
 ## Research artifact policy
 
 `outputs/`, checkpoints, Optuna databases, and temporary runs remain ignored. The three datasets
@@ -75,6 +91,7 @@ regenerated artifacts.
 ## Known limitations
 
 - The canonical walk-forward result currently uses one deterministic seed.
+- The DNFS ablation uses five seeds but only five walk-forward origins and one market.
 - Recursive forecasting supports only Close and generated Close-derived indicators.
 - Direct forecasting predicts one endpoint at `t+h`; it is not a multi-output sequence decoder.
 - Hybrid-specific Optuna search spaces are not implemented.
@@ -87,12 +104,13 @@ regenerated artifacts.
 ## Remaining work
 
 1. Rerun the matched WIG20 indicator and direct-vs-recursive ablation from the fixed implementation.
-2. Run at least three post-fix deterministic seeds for persistence and the strongest challengers.
+2. Run at least three post-fix deterministic seeds for persistence and the strongest non-DNFS challengers.
 3. Run full rolling-window evaluation and compare rankings with expanding windows.
 4. Reproduce the canonical protocol on BIST100 and S&P 500 and test parameter transfer.
 5. Add uncertainty estimates or statistical tests across folds and seeds.
 6. Consider parallel fold/trial execution after reproducibility guarantees are preserved.
 7. Run and curate the configured three-market, two-feature, five-seed batch study.
+8. Replicate the recommended DNFS configuration on BIST100 and S&P 500 with more walk-forward origins.
 
 ## Useful commands
 

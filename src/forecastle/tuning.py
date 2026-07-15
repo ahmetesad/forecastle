@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from forecastle.config import AppConfig, ModelRunConfig
 
 
-NEURAL_MODELS = {"mlp", "rnn", "lstm", "gru", "cnn1d"}
+NEURAL_MODELS = {"mlp", "rnn", "lstm", "gru", "cnn1d", "dnfs"}
 
 
 def run_tuning(config: AppConfig) -> Path:
@@ -114,7 +114,7 @@ class TuningObjective:
         checkpoint_path = (
             self.run_dir / "checkpoints" / f"trial_{trial.number:04d}_{self.model_config.name}.pt"
         )
-        trainer = Trainer(model, training_config, self.device, checkpoint_path)
+        trainer = Trainer(model, training_config, self.device, checkpoint_path, seed=trial_seed)
 
         def report(epoch: int, val_loss: float) -> None:
             trial.report(val_loss, step=epoch)
@@ -186,6 +186,54 @@ def suggest_batch_size(trial: optuna.Trial, values: list[int]) -> int:
 
 
 def suggest_model_params(trial: optuna.Trial, model_name: str) -> dict[str, Any]:
+    if model_name == "dnfs":
+        encoder_type = str(
+            trial.suggest_categorical("encoder_type", ["gru", "lstm", "cnn1d", "flatten"])
+        )
+        encoder_hidden_size = int(
+            trial.suggest_categorical("encoder_hidden_size", [16, 32, 64, 128])
+        )
+        latent_size = int(trial.suggest_categorical("latent_size", [16, 32, 64, 128]))
+        num_rules = int(trial.suggest_categorical("num_rules", [4, 8, 16, 32]))
+        consequent_type = str(
+            trial.suggest_categorical(
+                "consequent_type",
+                ["zero_order", "first_order", "mlp"],
+            )
+        )
+        gating = str(trial.suggest_categorical("gating", ["softmax", "topk"]))
+        params: dict[str, Any] = {
+            "encoder_type": encoder_type,
+            "encoder_hidden_size": encoder_hidden_size,
+            "encoder_num_layers": int(trial.suggest_int("encoder_num_layers", 1, 2)),
+            "encoder_dropout": float(trial.suggest_float("encoder_dropout", 0.0, 0.4)),
+            "latent_size": latent_size,
+            "num_rules": num_rules,
+            "consequent_type": consequent_type,
+            "rule_temperature": float(trial.suggest_float("rule_temperature", 0.25, 2.0, log=True)),
+            "min_width": float(trial.suggest_categorical("min_width", [0.01, 0.05, 0.1])),
+            "max_width": 5.0,
+            "consequent_dropout": float(trial.suggest_float("consequent_dropout", 0.0, 0.4)),
+            "usage_regularization": float(
+                trial.suggest_categorical(
+                    "usage_regularization",
+                    [0.0, 1e-4, 1e-3, 1e-2],
+                )
+            ),
+            "gating": gating,
+        }
+        if encoder_type == "cnn1d":
+            params["encoder_kernel_size"] = int(
+                trial.suggest_categorical("encoder_kernel_size", [3, 5, 7])
+            )
+        if consequent_type == "mlp":
+            params["consequent_hidden_size"] = int(
+                trial.suggest_categorical("consequent_hidden_size", [8, 16, 32, 64])
+            )
+        if gating == "topk":
+            params["top_k_rules"] = int(trial.suggest_categorical("top_k_rules", [1, 2, 4]))
+        return params
+
     hidden_size = int(trial.suggest_categorical("hidden_size", [16, 32, 64, 128, 256]))
     num_layers = int(trial.suggest_int("num_layers", 1, 3))
     dropout = float(trial.suggest_float("dropout", 0.0, 0.5))
@@ -297,6 +345,28 @@ def build_tuned_config(
 
 
 def trial_params_to_model_params(model_name: str, params: dict[str, Any]) -> dict[str, Any]:
+    if model_name == "dnfs":
+        names = {
+            "encoder_type",
+            "encoder_hidden_size",
+            "encoder_num_layers",
+            "encoder_dropout",
+            "latent_size",
+            "num_rules",
+            "consequent_type",
+            "consequent_hidden_size",
+            "encoder_kernel_size",
+            "rule_temperature",
+            "min_width",
+            "consequent_dropout",
+            "usage_regularization",
+            "gating",
+            "top_k_rules",
+        }
+        model_params = {name: value for name, value in params.items() if name in names}
+        model_params["max_width"] = 5.0
+        return model_params
+
     hidden_size = int(params["hidden_size"])
     num_layers = int(params["num_layers"])
     dropout = float(params["dropout"])
@@ -333,6 +403,12 @@ def write_top_trials(trials: Any, run_dir: Path, top_n: int = 10) -> None:
         "params_dropout",
         "params_learning_rate",
         "params_weight_decay",
+        "params_encoder_type",
+        "params_encoder_hidden_size",
+        "params_latent_size",
+        "params_num_rules",
+        "params_consequent_type",
+        "params_rule_temperature",
         "user_attrs_val_rmse",
         "user_attrs_val_price_rmse",
         "user_attrs_validation_persistence_rmse",

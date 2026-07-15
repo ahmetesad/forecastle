@@ -99,7 +99,7 @@ and train/validation/test splits.
 - LSTM
 - GRU
 - 1D CNN
-- DNFS baseline
+- Temporal DNFS (legacy flattened mode remains available)
 - LSTM-GRU (`LSTM -> GRU -> linear head`)
 - CNN-LSTM (`Conv1d -> LSTM -> linear head`)
 
@@ -195,23 +195,95 @@ Walk-forward runs preserve the normal comparison and per-model outputs and addit
 - `fit_summaries.csv` and `fit_summaries.md`
 - `plots/horizon_rmse.png`
 - fold checkpoints under `checkpoints/<model>/`
+- DNFS rule diagnostics under `rule_analysis/rule_activations.csv`
+- DNFS regime plot under `plots/dnfs_rule_activations.png`
 
 Prediction files are long-form and uniquely keyed by model, fold, forecast origin, target date, and
 horizon step. Direct forecasts contain only the configured endpoint; recursive forecasts contain
 every generated step.
 
-## DNFS baseline
+## Temporal DNFS
 
-The `dnfs` model is a compact neuro-fuzzy regression baseline inspired by ANFIS-style
-Takagi-Sugeno systems.
+The `dnfs` model is a temporal deep neuro-fuzzy system. A GRU, LSTM, causal CNN1D, or legacy
+flattening encoder maps each input window to a normalized latent state `z`. Rule `r` has a learned
+Gaussian center `c[r]` and bounded positive width `sigma[r]`:
 
-Example YAML:
+```text
+log_strength[r] = -0.5 * reduce(((z - c[r]) / sigma[r])^2)
+alpha = softmax(log_strength / rule_temperature)
+prediction = sum_r alpha[r] * consequent[r](z)
+```
+
+`strength_reduction: mean` tempers the score by latent dimension; `sum` is the literal Gaussian
+membership product evaluated in log space. Ordinary softmax gating uses every rule. Optional top-k
+gating retains and renormalizes only the strongest rules.
+
+Consequents may be `zero_order` constants, standard first-order affine Takagi-Sugeno functions, or
+small rule-specific `mlp` networks. The MLP option is a generalized nonlinear TSK-style consequent;
+the fuzzy Gaussian rule system still supplies its gating weights.
+
+Temporal GRU example:
 
 ```yaml
 - name: dnfs
   params:
+    encoder_type: gru
+    encoder_hidden_size: 64
+    encoder_num_layers: 1
+    encoder_dropout: 0.1
+    latent_size: 32
     num_rules: 16
-    dropout: 0.1
+    strength_reduction: mean
+    rule_temperature: 1.0
+    min_width: 0.05
+    max_width: 5.0
+    consequent_type: first_order
+    antecedent_dropout: 0.0
+    consequent_dropout: 0.1
+    rule_initialization: kmeans
+    usage_regularization: 0.001
+    gating: topk
+    top_k_rules: 4
+```
+
+K-means initialization runs the initialized encoder over training windows only, then initializes
+centers and widths from deterministic latent clusters. Validation and test windows are never used.
+Usage regularization is disabled at `0.0`; positive values softly penalize collapse through the KL
+divergence of average rule use from uniform use. It does not force exactly uniform per-sample rules.
+
+`residual_mode` can be `none`, `persistence`, or `linear`. Persistence adds the last known price for
+price targets and zero for return targets. Linear fits and freezes the same OLS-style flattened
+window baseline using that fold's training loader only. In both cases, normalized fuzzy-rule
+aggregation remains the learned correction.
+
+Each run saves normalized rule activations, raw strengths, rule consequent outputs, entropy,
+dominance, and unused-rule counts by forecast date. The Python API also exposes
+`estimate_average_rule_usage`, `identify_unused_rules`, and `prune_rules`; pruning is never automatic.
+
+### DNFS migration
+
+Direct Python construction defaults to the temporal GRU encoder. For reproducibility, YAML files
+created before the temporal DNFS that omit `encoder_type` are parsed as:
+
+```yaml
+encoder_type: flatten
+legacy_mode: true
+```
+
+Set `encoder_type: gru` explicitly for the new default architecture. The old `dropout` parameter is
+accepted in legacy mode and maps to the historical shared dropped representation. New configs
+should use separate `encoder_dropout`, `antecedent_dropout`, and `consequent_dropout`; antecedent
+dropout defaults to zero so fuzzy matching is deterministic unless explicitly changed.
+
+The current matched WIG20 ablation supports GRU + first-order consequents + 8 rules with
+`usage_regularization: 1e-3` as the research default. It compares five deterministic seeds,
+neighboring regularization coefficients, and 4/8/16 rules. See the exact design, limitations,
+curated tables, and plots in
+[`results/wig20/dnfs_ablation/`](results/wig20/dnfs_ablation/). Regenerate the summaries after
+running the tracked study configs with:
+
+```bash
+uv run python scripts/analyze_dnfs_ablation.py
 ```
 
 ## Development
@@ -234,6 +306,10 @@ The tuning command reuses the normal dataset, model, and training pipeline. It p
 chronological train/validation/test split, fits scalers on the training split only, and optimizes
 the selected model on validation data. The example config searches over hidden size, number of
 layers, dropout, learning rate, weight decay, batch size, and lookback length.
+
+DNFS tuning uses the same command and additionally searches temporal encoder, latent size, rule
+count, consequent family, temperature, width floor, consequent dropout, usage regularization, and
+softmax/top-k gating parameters.
 
 Configure tuning in YAML:
 

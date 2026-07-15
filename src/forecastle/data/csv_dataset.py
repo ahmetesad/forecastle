@@ -38,6 +38,7 @@ def build_csv_datamodule(
         val_slice,
         test_slice,
         target_name=bundle.target_name,
+        feature_names=bundle.feature_names,
     )
 
 
@@ -50,6 +51,7 @@ def build_datamodule_from_samples(
     val_indices: slice | np.ndarray,
     test_indices: slice | np.ndarray,
     target_name: str | None = None,
+    feature_names: list[str] | None = None,
 ) -> DataModule:
     windows = samples.features
     targets = samples.targets
@@ -140,6 +142,7 @@ def build_datamodule_from_samples(
         horizon=dataset_config.horizon,
         target_name=target_name or dataset_config.target_column,
         target_transform=dataset_config.target_transform,
+        feature_names=feature_names or [f"feature_{index}" for index in range(windows.shape[-1])],
         feature_mean=feature_mean,
         feature_std=feature_std,
         val_target_dates=samples.target_dates[val_indices],

@@ -18,6 +18,10 @@ from forecastle.evaluation.common import make_run_dir, resolve_device
 from forecastle.evaluation.forecasters import fit_all_forecasters
 from forecastle.evaluation.forecasting import forecast_direct
 from forecastle.evaluation.metrics import records_to_frame, summarize_forecasts
+from forecastle.evaluation.rule_analysis import (
+    drain_rule_activation_rows,
+    write_rule_activation_artifacts,
+)
 from forecastle.evaluation.types import ExperimentResult
 from forecastle.utils.seed import seed_everything
 
@@ -44,6 +48,7 @@ def run_direct_holdout(config: AppConfig) -> ExperimentResult:
         val_slice,
         test_slice,
         target_name=bundle.target_name,
+        feature_names=bundle.feature_names,
     )
     run_dir = make_run_dir(config.experiment.output_dir, config.experiment.name)
     forecasters = fit_all_forecasters(
@@ -59,18 +64,19 @@ def run_direct_holdout(config: AppConfig) -> ExperimentResult:
     test_start = int(test_slice.start or 0)
     test_stop = int(test_slice.stop or len(samples.features))
     records = []
+    rule_activation_rows = []
     for forecaster in forecasters:
         for sample_index in range(test_start, test_stop):
-            records.extend(
-                forecast_direct(
-                    forecaster,
-                    bundle,
-                    samples,
-                    sample_index,
-                    config.dataset,
-                    fold=0,
-                )
+            model_records = forecast_direct(
+                forecaster,
+                bundle,
+                samples,
+                sample_index,
+                config.dataset,
+                fold=0,
             )
+            records.extend(model_records)
+            rule_activation_rows.extend(drain_rule_activation_rows(forecaster, model_records))
 
     summaries = [forecaster.summary for forecaster in forecasters]
     comparison_rows, _fold_metrics, _horizon_metrics = summarize_forecasts(records, summaries)
@@ -98,4 +104,5 @@ def run_direct_holdout(config: AppConfig) -> ExperimentResult:
             title=f"{config.dataset.name} - {model}",
         )
     write_comparison(run_dir, comparison_rows)
+    write_rule_activation_artifacts(run_dir, rule_activation_rows)
     return ExperimentResult(run_dir=run_dir, comparison_rows=comparison_rows)

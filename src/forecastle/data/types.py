@@ -56,6 +56,7 @@ class DataModule:
     horizon: int
     target_name: str
     target_transform: str
+    feature_names: list[str]
     feature_mean: np.ndarray
     feature_std: np.ndarray
     val_target_dates: np.ndarray

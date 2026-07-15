@@ -214,10 +214,18 @@ def _parse_technical_indicators(raw: Any) -> TechnicalIndicatorConfig | None:
 
 def _parse_training(raw: dict[str, Any]) -> TrainingConfig:
     model_items = raw.get("models", [])
-    models = [
-        ModelRunConfig(name=str(item["name"]), params=dict(item.get("params", {})))
-        for item in model_items
-    ]
+    models = []
+    for item in model_items:
+        name = str(item["name"])
+        params = dict(item.get("params", {}))
+        if name == "dnfs" and "encoder_type" not in params:
+            architecture_version = params.pop("architecture_version", None)
+            if architecture_version == "temporal":
+                params["encoder_type"] = "gru"
+            else:
+                params["encoder_type"] = "flatten"
+                params["legacy_mode"] = True
+        models.append(ModelRunConfig(name=name, params=params))
     baseline_items = raw.get("baselines", ["naive_persistence", "linear_regression"])
     baselines = [str(name) for name in baseline_items]
     unknown_baselines = sorted(set(baselines) - {"naive_persistence", "linear_regression"})

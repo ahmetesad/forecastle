@@ -112,6 +112,8 @@ def test_run_experiment_trains_dnfs(tmp_path) -> None:
 
     assert (result.run_dir / "checkpoints" / "dnfs.pt").exists()
     assert (result.run_dir / "metrics" / "dnfs_metrics.yaml").exists()
+    assert (result.run_dir / "rule_analysis" / "rule_activations.csv").exists()
+    assert (result.run_dir / "plots" / "dnfs_rule_activations.png").exists()
     assert {row["model"] for row in result.comparison_rows} == {
         "linear_regression",
         "naive_persistence",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import torch
 
+from forecastle.config import parse_config
 from forecastle.models import build_model, list_models
 
 
@@ -29,6 +30,30 @@ def test_registry_builds_dnfs() -> None:
     output = model(inputs)
 
     assert output.shape == (2, 1)
+
+
+def test_legacy_dnfs_yaml_defaults_to_flatten() -> None:
+    config = parse_config(
+        {
+            "experiment": {"name": "legacy"},
+            "dataset": {
+                "name": "synthetic",
+                "csv_path": "prices.csv",
+                "date_column": "Date",
+                "target_column": "Close",
+            },
+            "training": {
+                "models": [{"name": "dnfs", "params": {"num_rules": 8}}],
+                "baselines": [],
+            },
+        }
+    )
+
+    assert config.training.models[0].params == {
+        "num_rules": 8,
+        "encoder_type": "flatten",
+        "legacy_mode": True,
+    }
 
 
 def test_hybrid_models_support_forward_and_backward() -> None:

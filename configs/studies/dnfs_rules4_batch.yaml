@@ -1,0 +1,19 @@
+base_config: dnfs_gru_first_order_usage_1e3_rules4.yaml
+batch:
+  name: dnfs_rules4
+  output_dir: outputs/studies/dnfs_rule_count_ablation
+  fail_fast: false
+  datasets:
+    - {name: wig20, source: csv, csv_path: data/raw/wig20.csv, date_column: Date, target_column: Close}
+  models: [naive_persistence, dnfs]
+  feature_sets:
+    indicators:
+      feature_columns: [Close]
+      technical_indicators:
+        sma_periods: [5, 10, 15, 20]
+        rsi_period: 14
+        macd: {fast_period: 12, slow_period: 26, signal_period: 9}
+  seeds: [1, 7, 42, 123, 2026]
+  horizon: 20
+  forecasting: {strategy: recursive}
+  evaluation: {strategy: walk_forward, window: expanding, step_size: 20, max_folds: 5}

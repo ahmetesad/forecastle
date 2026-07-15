@@ -72,17 +72,38 @@ class NeuralForecaster:
         device: torch.device,
         checkpoint_path: Path,
         fold: int,
+        seed: int,
     ) -> None:
         self.name = model_config.name
         self.datamodule = datamodule
         self.device = device
+        self._pending_rule_diagnostics: list[dict[str, torch.Tensor]] = []
         model = build_model(
             model_config.name,
             sequence_length=datamodule.sequence_length,
             feature_count=datamodule.feature_count,
             params=model_config.params,
         )
-        self.trainer = Trainer(model, training_config, device, checkpoint_path)
+        configure_residual = getattr(model, "configure_residual", None)
+        if callable(configure_residual):
+            try:
+                target_feature_index = datamodule.feature_names.index(datamodule.target_name)
+            except ValueError as error:
+                if getattr(model, "residual_mode", "none") == "persistence":
+                    msg = (
+                        "DNFS persistence residual requires the target column as an input feature."
+                    )
+                    raise ValueError(msg) from error
+                target_feature_index = datamodule.feature_count - 1
+            configure_residual(
+                target_feature_index=target_feature_index,
+                target_transform=datamodule.target_transform,
+                feature_target_mean=float(datamodule.feature_mean[target_feature_index]),
+                feature_target_std=float(datamodule.feature_std[target_feature_index]),
+                target_mean=datamodule.target_mean,
+                target_std=datamodule.target_std,
+            )
+        self.trainer = Trainer(model, training_config, device, checkpoint_path, seed=seed)
         fit_result = self.trainer.fit(datamodule.train_loader, datamodule.val_loader)
         self.summary = FitSummary(
             model=self.name,
@@ -100,9 +121,36 @@ class NeuralForecaster:
         self.trainer.model.eval()
         start = time.perf_counter()
         with torch.no_grad():
-            predicted_scaled = float(self.trainer.model(tensor).detach().cpu().item())
+            diagnostic_forward = getattr(self.trainer.model, "forward_with_diagnostics", None)
+            if callable(diagnostic_forward):
+                diagnostics = diagnostic_forward(tensor)
+                predicted_tensor = diagnostics["prediction"]
+                self._pending_rule_diagnostics.append(
+                    {
+                        name: value.detach().cpu()
+                        for name, value in diagnostics.items()
+                        if name
+                        in {
+                            "rule_weights",
+                            "log_strengths",
+                            "consequent_outputs",
+                            "rule_entropy",
+                            "max_activation",
+                            "unused_rule_count",
+                            "dominant_rule_fraction",
+                        }
+                    }
+                )
+            else:
+                predicted_tensor = self.trainer.model(tensor)
+            predicted_scaled = float(predicted_tensor.detach().cpu().item())
         self.summary.inference_time_seconds += time.perf_counter() - start
         return predicted_scaled * self.datamodule.target_std + self.datamodule.target_mean
+
+    def drain_rule_diagnostics(self) -> list[dict[str, torch.Tensor]]:
+        diagnostics = self._pending_rule_diagnostics
+        self._pending_rule_diagnostics = []
+        return diagnostics
 
 
 def fit_all_forecasters(
@@ -135,6 +183,7 @@ def fit_all_forecasters(
                 device,
                 checkpoint_path,
                 fold,
+                seed,
             )
         )
     return forecasters

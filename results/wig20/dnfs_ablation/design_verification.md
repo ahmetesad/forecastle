@@ -1,0 +1,4 @@
+| check | passed | observed_unique_values |
+| --- | --- | --- |
+| identical_forecast_origins | True | 1 |
+| identical_persistence_price_rmse | True | 1 |

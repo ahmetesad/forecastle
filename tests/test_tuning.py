@@ -74,3 +74,54 @@ def test_run_tuning_writes_artifacts(tmp_path) -> None:
     assert (run_dir / "optimization_history.md").exists()
     assert (run_dir / "parameter_importance.yaml").exists()
     assert (run_dir / "tuned_config.yaml").exists()
+
+
+def test_optuna_constructs_and_trains_dnfs_trial(tmp_path) -> None:
+    csv_path = tmp_path / "prices.csv"
+    rows = 75
+    values = np.linspace(100.0, 115.0, rows)
+    pd.DataFrame(
+        {
+            "Date": pd.date_range("2024-01-01", periods=rows),
+            "Close": values,
+        }
+    ).to_csv(csv_path, index=False)
+    config = AppConfig(
+        experiment=ExperimentConfig(name="dnfs_tuning", output_dir=tmp_path / "outputs", seed=3),
+        dataset=DatasetConfig(
+            name="synthetic",
+            csv_path=csv_path,
+            date_column="Date",
+            target_column="Close",
+            feature_columns=["Close"],
+            sequence_length=5,
+            horizon=1,
+        ),
+        training=TrainingConfig(
+            batch_size=8,
+            epochs=1,
+            patience=1,
+            models=[
+                ModelRunConfig(
+                    name="dnfs",
+                    params={"encoder_type": "gru", "num_rules": 4},
+                )
+            ],
+            baselines=[],
+        ),
+        tuning=TuningConfig(
+            enabled=True,
+            model="dnfs",
+            trials=1,
+            seed=3,
+            storage=f"sqlite:///{tmp_path / 'dnfs.db'}",
+            sequence_lengths=[5],
+            batch_sizes=[8],
+            use_pruner=False,
+        ),
+    )
+
+    run_dir = run_tuning(config)
+
+    assert (run_dir / "best_params.yaml").exists()
+    assert (run_dir / "tuned_config.yaml").exists()

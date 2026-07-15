@@ -140,6 +140,35 @@ def test_recursive_predictions_do_not_use_future_ground_truth(tmp_path) -> None:
     ]
 
 
+@pytest.mark.parametrize("prediction", [-1_000.0, 1_000.0])
+def test_recursive_forecast_reports_numerical_divergence(tmp_path, prediction: float) -> None:
+    csv_path = tmp_path / "prices.csv"
+    write_close_csv(csv_path)
+    config = DatasetConfig(
+        name="synthetic",
+        csv_path=csv_path,
+        date_column="Date",
+        target_column="Close",
+        feature_columns=["Close"],
+        target_transform="log_return",
+        sequence_length=4,
+        horizon=3,
+    )
+    bundle = load_csv_dataset(config)
+
+    with pytest.raises(
+        ValueError,
+        match=r"model=constant, fold=9, .*horizon_step=1, .*predicted_target=",
+    ):
+        forecast_recursive(
+            ConstantForecaster("constant", prediction),
+            bundle,
+            15,
+            config,
+            fold=9,
+        )
+
+
 def test_direct_forecast_emits_only_endpoint(tmp_path) -> None:
     csv_path = tmp_path / "prices.csv"
     write_close_csv(csv_path)

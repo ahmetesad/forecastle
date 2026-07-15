@@ -34,7 +34,8 @@ def reconstruct_next_price(
     if target_transform == "return":
         return previous_price * (1.0 + prediction)
     if target_transform == "log_return":
-        return previous_price * float(np.exp(prediction))
+        with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+            return previous_price * float(np.exp(prediction))
     msg = f"Unknown target transform: {target_transform}"
     raise ValueError(msg)
 

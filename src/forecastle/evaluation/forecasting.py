@@ -82,6 +82,15 @@ def forecast_recursive(
             predicted_one_step,
             dataset_config.target_transform,
         )
+        _validate_recursive_prediction(
+            forecaster=forecaster,
+            fold=fold,
+            forecast_origin=origin_date,
+            horizon_step=horizon_step,
+            previous_price=previous_price,
+            predicted_target=predicted_one_step,
+            predicted_price=predicted_price,
+        )
         synthetic_prices.append(predicted_price)
 
         target_index = origin_index + horizon_step
@@ -108,6 +117,26 @@ def forecast_recursive(
             )
         )
     return records
+
+
+def _validate_recursive_prediction(
+    forecaster: FittedForecaster,
+    fold: int,
+    forecast_origin: str,
+    horizon_step: int,
+    previous_price: float,
+    predicted_target: float,
+    predicted_price: float,
+) -> None:
+    if np.isfinite(predicted_target) and np.isfinite(predicted_price) and predicted_price > 0.0:
+        return
+    msg = (
+        "Recursive forecast diverged: "
+        f"model={forecaster.name}, fold={fold}, forecast_origin={forecast_origin}, "
+        f"horizon_step={horizon_step}, previous_price={previous_price!r}, "
+        f"predicted_target={predicted_target!r}, reconstructed_price={predicted_price!r}."
+    )
+    raise ValueError(msg)
 
 
 def format_date(value: object) -> str:
