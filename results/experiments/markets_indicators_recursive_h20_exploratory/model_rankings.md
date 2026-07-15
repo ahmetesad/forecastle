@@ -1,0 +1,14 @@
+| feature_set | model | mean_price_rmse_rank | std_price_rmse_rank | mean_ratio_to_persistence | runs |
+| --- | --- | --- | --- | --- | --- |
+| close | lstm_gru | 2.2 | 1.14642 | 1.00372 | 15 |
+| close | naive_persistence | 2.66667 | 1.71825 | 1 | 15 |
+| close | mlp | 2.8 | 0.861892 | 1.10812 | 15 |
+| close | cnn1d | 3.06667 | 1.33452 | 1.36241 | 15 |
+| close | linear_regression | 4.8 | 1.52128 | 2.09391 | 15 |
+| close | dnfs | 5.46667 | 0.63994 | 2.57016 | 15 |
+| indicators | naive_persistence | 1.93333 | 1.27988 | 1 | 15 |
+| indicators | lstm_gru | 2.33333 | 0.723747 | 1.01643 | 15 |
+| indicators | cnn1d | 2.86667 | 1.45733 | 1.30153 | 15 |
+| indicators | mlp | 3.46667 | 1.24595 | 1.17425 | 15 |
+| indicators | linear_regression | 5 | 0.471405 | 1.03816 | 10 |
+| indicators | dnfs | 5.1 | 1.66333 | 1.20189 | 10 |

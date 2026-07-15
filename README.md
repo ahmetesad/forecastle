@@ -449,9 +449,12 @@ persistence predictions and metrics exactly across feature conditions. Any check
 the canonical batch. Failed combinations remain in manifests, aggregate tables, and rankings with
 explicit completion and divergence fields. Rankings use price RMSE, never return MAPE.
 
-The earlier `markets_indicators_recursive_h20` batch is retained as exploratory historical evidence.
+The earlier `markets_indicators_recursive_h20` batch is retained as
+[curated exploratory historical evidence](results/experiments/markets_indicators_recursive_h20_exploratory/README.md).
 Its Close and indicator origins were shifted by indicator warm-up, so its indicator-effect table is
-not a controlled ablation and is not reused by the canonical study.
+not a controlled ablation and is not reused by the canonical study. The committed subset includes
+the study definition, manifest, aggregate and horizon tables, seed summaries, and key plots, while
+excluding checkpoints and raw per-run output directories.
 
 Forecastle uses Matplotlib's non-interactive `Agg` backend for file artifacts, including when
 Kaggle or Colab exports a notebook backend that is unavailable inside the isolated `uv` environment.

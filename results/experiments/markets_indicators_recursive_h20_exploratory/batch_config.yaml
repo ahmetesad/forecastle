@@ -1,0 +1,59 @@
+base_config: configs/evaluation/wig20_walk_forward_recursive.yaml
+
+batch:
+  name: markets_indicators_recursive_h20
+  output_dir: outputs/batches
+  fail_fast: false
+
+  datasets:
+    - name: wig20
+      source: csv
+      csv_path: data/raw/wig20.csv
+      date_column: Date
+      target_column: Close
+    - name: sp500
+      source: csv
+      csv_path: data/raw/sp500.csv
+      date_column: Date
+      target_column: Close
+    - name: bist100
+      source: csv
+      csv_path: data/raw/bist100.csv
+      date_column: Date
+      target_column: Close
+
+  models:
+    - naive_persistence
+    - linear_regression
+    - cnn1d
+    - mlp
+    - lstm_gru
+    - dnfs
+
+  feature_sets:
+    close:
+      feature_columns: [Close]
+      technical_indicators: null
+    indicators:
+      feature_columns: [Close]
+      technical_indicators:
+        sma_periods: [5, 10, 15, 20]
+        rsi_period: 14
+        macd:
+          fast_period: 12
+          slow_period: 26
+          signal_period: 9
+
+  seeds: [1, 7, 42, 123, 2026]
+  horizon: 20
+
+  forecasting:
+    strategy: recursive
+
+  evaluation:
+    strategy: walk_forward
+    window: expanding
+    step_size: null
+    validation_size: null
+    train_window_size: null
+    max_folds: null

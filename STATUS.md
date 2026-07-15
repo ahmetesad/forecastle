@@ -79,14 +79,29 @@ therefore GRU + first-order consequents + 8 rules + `usage_regularization=1e-3`.
 curated tables, and plots are under
 [`results/wig20/dnfs_ablation/`](results/wig20/dnfs_ablation/).
 
+### Exploratory three-market recursive batch
+
+The first full batch attempted 180 combinations across WIG20, S&P 500, BIST100, six models, two
+feature conditions, and five seeds. It completed 170 runs; five BIST100 linear-regression indicator
+runs and five BIST100 DNFS indicator runs failed after recursive forecasts produced non-finite
+histories. Within individual feature conditions, the strongest learned-model evidence appeared on
+the S&P 500, while persistence remained strongest on BIST100 and close to the best WIG20 result.
+
+This batch is evidence of completed experimentation, but it is not a controlled indicator
+ablation: indicator warm-up shifted the usable dates and forecast origins relative to Close-only
+runs. Its generated indicator-effect tables are therefore retained but explicitly marked as
+confounded. Curated configs, manifests, summaries, horizon tables, and plots are under
+[`results/experiments/markets_indicators_recursive_h20_exploratory/`](results/experiments/markets_indicators_recursive_h20_exploratory/).
+
 ## Research artifact policy
 
 `outputs/`, checkpoints, Optuna databases, and temporary runs remain ignored. The three datasets
 used by tracked experiments are committed as fixed research snapshots to simplify collaboration;
-additional raw downloads remain ignored. The repository otherwise keeps only selected final
-tables, key plots, exact experiment configs, concise analyses, checksums, and representative
-prediction files. This makes the principal results inspectable while avoiding large or easily
-regenerated artifacts.
+additional raw downloads remain ignored. The repository otherwise keeps selected final and
+historically important exploratory tables, key plots, exact experiment configs, concise analyses,
+checksums, manifests, and representative prediction files. Exploratory artifacts are labeled with
+their methodological limitations. This makes the research trail inspectable while avoiding large
+or easily regenerated artifacts.
 
 ## Known limitations
 
