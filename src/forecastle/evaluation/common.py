@@ -60,7 +60,7 @@ def prefixed_metrics(prefix: str, metrics: dict[str, float]) -> dict[str, float]
 
 
 def make_run_dir(output_dir: Path, experiment_name: str) -> Path:
-    timestamp = datetime.now(tz=UTC).strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%d_%H%M%S_%f")
     run_dir = output_dir / experiment_name / timestamp
     run_dir.mkdir(parents=True, exist_ok=False)
     return run_dir

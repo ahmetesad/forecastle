@@ -33,6 +33,11 @@ def main() -> None:
         default=None,
         help="Maximum number of stable batch runs to consider.",
     )
+    batch_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Materialize plans and print the run matrix without training models.",
+    )
 
     sweep_parser = subparsers.add_parser("sweep", help="Run an experiment sweep from YAML.")
     sweep_parser.add_argument(
@@ -96,7 +101,7 @@ def main() -> None:
         result = run_experiment(config)
         print(f"Wrote experiment artifacts to {result.run_dir}")
     elif args.command == "batch":
-        batch_dir = run_batch(args.config, limit=args.limit)
+        batch_dir = run_batch(args.config, limit=args.limit, dry_run=args.dry_run)
         print(f"Wrote batch artifacts to {batch_dir}")
     elif args.command == "sweep":
         sweep_dir = run_sweep(args.config, limit=args.limit)

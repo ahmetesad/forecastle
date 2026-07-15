@@ -55,6 +55,7 @@ class DatasetConfig:
     scale_target: bool = True
     dropna: bool = True
     technical_indicators: TechnicalIndicatorConfig | None = None
+    aligned_warmup_rows: int = 0
 
 
 @dataclass(frozen=True)
@@ -70,6 +71,7 @@ class EvaluationConfig:
     validation_size: int | None = None
     train_window_size: int | None = None
     max_folds: int | None = None
+    matched_plan_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -182,6 +184,7 @@ def _parse_dataset(raw: dict[str, Any]) -> DatasetConfig:
         scale_target=bool(raw.get("scale_target", True)),
         dropna=bool(raw.get("dropna", True)),
         technical_indicators=indicators,
+        aligned_warmup_rows=int(raw.get("aligned_warmup_rows", 0)),
     )
 
 
@@ -304,6 +307,9 @@ def _parse_evaluation(raw: dict[str, Any]) -> EvaluationConfig:
             raw.get("train_window_size"), "evaluation.train_window_size"
         ),
         max_folds=_optional_positive_int(raw.get("max_folds"), "evaluation.max_folds"),
+        matched_plan_path=(
+            Path(raw["matched_plan_path"]) if raw.get("matched_plan_path") is not None else None
+        ),
     )
 
 
@@ -314,6 +320,9 @@ def _validate_ratios(config: DatasetConfig) -> None:
         raise ValueError(msg)
     if config.sequence_length < 1 or config.horizon < 1:
         msg = "sequence_length and horizon must be positive."
+        raise ValueError(msg)
+    if config.aligned_warmup_rows < 0:
+        msg = "dataset.aligned_warmup_rows must be non-negative."
         raise ValueError(msg)
     if config.target_transform not in {"price", "return", "log_return"}:
         msg = "dataset.target_transform must be one of: price, return, log_return."

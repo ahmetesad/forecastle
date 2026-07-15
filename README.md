@@ -379,7 +379,8 @@ uv run forecastle sweep --config configs/sweeps/markets_lookbacks_horizons.yaml
 ## Batch experiments
 
 Batch experiments run independently resumable, single-model configurations and aggregate their
-results across markets, feature sets, and seeds. The first large study contains 180 runs:
+results across markets, feature sets, and seeds. The canonical matched-origin study contains 180
+runs:
 
 - Markets: WIG20, S&P 500, and BIST100.
 - Models: persistence, linear regression, CNN1D, MLP, LSTM-GRU, and DNFS.
@@ -387,11 +388,23 @@ results across markets, feature sets, and seeds. The first large study contains 
 - Seeds: `1`, `7`, `42`, `123`, and `2026`.
 - Expanding walk-forward evaluation with recursive horizon-20 forecasting.
 
-Run or resume it locally:
+Technical-indicator warm-up can otherwise shift split boundaries. The canonical batch computes the
+maximum required warm-up for each market, applies the same total prefix exclusion to both feature
+conditions, materializes one dated fold plan per market, and validates every run against that plan.
+
+Resolve the complete matrix and plans without training:
+
+```bash
+uv run forecastle batch \
+  --config configs/batches/markets_matched_origins_recursive_h20.yaml \
+  --dry-run
+```
+
+Run or resume the canonical study:
 
 ```bash
 uv sync --frozen --dev
-uv run forecastle batch --config configs/batches/markets_indicators_recursive_h20.yaml
+uv run forecastle batch --config configs/batches/markets_matched_origins_recursive_h20.yaml
 ```
 
 The command is resume-safe. Successful runs are validated and skipped; failed or interrupted runs
@@ -400,21 +413,28 @@ include every varied batch dimension, for example
 `wig20__cnn1d__close__seed42`.
 
 The stable output directory is
-`outputs/batches/markets_indicators_recursive_h20/`:
+`outputs/batches/markets_matched_origins_recursive_h20/`:
 
 ```text
 batch_config.yaml
 study_metadata.yaml
 planned_runs.csv
+matched_origins/<market>_plan.csv
+matched_origins/<market>_usable_dates.csv
 runs/<stable-run-id>/config.yaml
 runs/<stable-run-id>/metadata.yaml
 runs/<stable-run-id>/artifacts/<timestamp>/...
+manifest.csv
+matched_origin_integrity.csv
+completion_summary.csv
+divergence_frequency.csv
 run_results.csv
 aggregate_metrics.csv
 model_rankings.csv
 indicator_effects.csv
 cross_market_comparison.csv
 aggregate_horizon_metrics.csv
+aggregate_fold_metrics.csv
 seed_stability.csv
 plots/
 ```
@@ -423,6 +443,15 @@ Every CSV summary also has a Markdown counterpart. Run metadata records status, 
 dataset hash, Git revision, package versions, timing, and the selected artifact directory. Study
 plots cover model ranking, indicator effects, cross-market performance, per-horizon performance,
 and seed stability.
+
+The integrity report checks dated fold and prediction keys for every successful run and compares
+persistence predictions and metrics exactly across feature conditions. Any checked mismatch aborts
+the canonical batch. Failed combinations remain in manifests, aggregate tables, and rankings with
+explicit completion and divergence fields. Rankings use price RMSE, never return MAPE.
+
+The earlier `markets_indicators_recursive_h20` batch is retained as exploratory historical evidence.
+Its Close and indicator origins were shifted by indicator warm-up, so its indicator-effect table is
+not a controlled ablation and is not reused by the canonical study.
 
 Forecastle uses Matplotlib's non-interactive `Agg` backend for file artifacts, including when
 Kaggle or Colab exports a notebook backend that is unavailable inside the isolated `uv` environment.
@@ -438,7 +467,7 @@ Python 3.12 when the notebook image does not already have it:
 !pip install -q uv
 !uv python install 3.12
 !uv sync --frozen --python 3.12
-!uv run forecastle batch --config configs/batches/markets_indicators_recursive_h20.yaml
+!uv run forecastle batch --config configs/batches/markets_matched_origins_recursive_h20.yaml
 ```
 
 Kaggle sessions are finite, so archive or save the stable batch directory as a notebook output.
@@ -454,9 +483,9 @@ The same workflow runs in Colab:
 !pip install -q uv
 !uv python install 3.12
 !uv sync --frozen --python 3.12
-!uv run forecastle batch --config configs/batches/markets_indicators_recursive_h20.yaml
+!uv run forecastle batch --config configs/batches/markets_matched_origins_recursive_h20.yaml
 ```
 
 For runs that span multiple Colab sessions, copy
-`outputs/batches/markets_indicators_recursive_h20/` to mounted Google Drive at the end of a session
+`outputs/batches/markets_matched_origins_recursive_h20/` to mounted Google Drive at the end of a session
 and restore it to the same path before resuming.

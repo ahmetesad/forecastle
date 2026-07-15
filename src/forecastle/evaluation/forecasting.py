@@ -8,6 +8,7 @@ import pandas as pd
 from forecastle.data.csv_dataset import make_window_target
 from forecastle.data.indicators import build_close_feature_matrix
 from forecastle.evaluation.common import reconstruct_next_price
+from forecastle.evaluation.errors import RecursiveForecastDivergence
 from forecastle.evaluation.types import ForecastRecord
 
 if TYPE_CHECKING:
@@ -130,13 +131,15 @@ def _validate_recursive_prediction(
 ) -> None:
     if np.isfinite(predicted_target) and np.isfinite(predicted_price) and predicted_price > 0.0:
         return
-    msg = (
-        "Recursive forecast diverged: "
-        f"model={forecaster.name}, fold={fold}, forecast_origin={forecast_origin}, "
-        f"horizon_step={horizon_step}, previous_price={previous_price!r}, "
-        f"predicted_target={predicted_target!r}, reconstructed_price={predicted_price!r}."
+    raise RecursiveForecastDivergence(
+        model=forecaster.name,
+        fold=fold,
+        forecast_origin=forecast_origin,
+        horizon_step=horizon_step,
+        previous_price=previous_price,
+        predicted_target=predicted_target,
+        reconstructed_price=predicted_price,
     )
-    raise ValueError(msg)
 
 
 def format_date(value: object) -> str:

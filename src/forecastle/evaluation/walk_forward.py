@@ -22,6 +22,12 @@ from forecastle.data.csv_dataset import (
 from forecastle.evaluation.common import make_run_dir, resolve_device
 from forecastle.evaluation.forecasters import fit_all_forecasters
 from forecastle.evaluation.forecasting import forecast_direct, forecast_recursive, format_date
+from forecastle.evaluation.matched import (
+    build_plan_frame,
+    load_matched_plan,
+    plan_origin_indices,
+    validate_plan_frame,
+)
 from forecastle.evaluation.metrics import (
     fit_summaries_to_frame,
     records_to_frame,
@@ -59,11 +65,20 @@ def run_walk_forward(config: AppConfig) -> ExperimentResult:
         training_horizon,
         fold_dataset_config.target_transform,
     )
+    matched_plan = (
+        load_matched_plan(config.evaluation.matched_plan_path)
+        if config.evaluation.matched_plan_path is not None
+        else None
+    )
+    matched_origins = (
+        plan_origin_indices(matched_plan, bundle) if matched_plan is not None else None
+    )
     folds = generate_walk_forward_folds(
         samples,
         len(bundle.target_prices),
         config.dataset,
         config.evaluation,
+        matched_origins,
     )
     if not folds:
         msg = "Walk-forward configuration produced no evaluable folds."
@@ -119,6 +134,10 @@ def run_walk_forward(config: AppConfig) -> ExperimentResult:
             summaries.append(forecaster.summary)
         fold_rows.append(fold_to_dict(fold, samples, bundle, config.dataset))
 
+    if matched_plan is not None:
+        actual_plan = build_plan_frame(folds, fold_rows, bundle, config.dataset)
+        validate_plan_frame(actual_plan, matched_plan, config.dataset.name)
+
     comparison_rows, fold_metrics, horizon_metrics = summarize_forecasts(records, summaries)
     write_walk_forward_artifacts(
         run_dir,
@@ -139,6 +158,7 @@ def generate_walk_forward_folds(
     series_length: int,
     dataset_config: DatasetConfig,
     evaluation_config: EvaluationConfig,
+    matched_origin_indices: list[int] | None = None,
 ) -> list[WalkForwardFold]:
     train_slice, val_slice, test_slice = split_slices(len(samples.features), dataset_config)
     initial_train_size = _slice_length(train_slice)
@@ -151,9 +171,13 @@ def generate_walk_forward_folds(
         int(sample_origin): index for index, sample_origin in enumerate(samples.origin_indices)
     }
 
+    if matched_origin_indices is None:
+        candidate_origins = range(origin_index, series_length - 1, step_size)
+    else:
+        candidate_origins = matched_origin_indices
+
     folds = []
-    fold_number = 0
-    while origin_index < series_length - 1:
+    for fold_number, origin_index in enumerate(candidate_origins):
         if evaluation_config.max_folds is not None and fold_number >= evaluation_config.max_folds:
             break
         forecast_sample_index = sample_by_origin.get(origin_index)
@@ -178,8 +202,6 @@ def generate_walk_forward_folds(
                 forecast_sample_index=forecast_sample_index,
             )
         )
-        fold_number += 1
-        origin_index += step_size
     return folds
 
 

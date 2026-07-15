@@ -6,7 +6,7 @@ import platform
 import re
 import subprocess
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
@@ -18,7 +18,16 @@ import yaml
 
 from forecastle.artifacts import write_dataframe
 from forecastle.batch_analysis import validate_run_artifacts, write_batch_summaries
+from forecastle.batch_integrity import write_matched_origin_integrity_report
 from forecastle.config import AppConfig, parse_config
+from forecastle.data.csv_dataset import load_csv_dataset, make_windowed_samples
+from forecastle.data.indicators import required_indicator_warmup
+from forecastle.evaluation.errors import RecursiveForecastDivergence
+from forecastle.evaluation.matched import MatchedOriginIntegrityError, build_plan_frame
+from forecastle.evaluation.walk_forward import (
+    fold_to_dict,
+    generate_walk_forward_folds,
+)
 from forecastle.experiment import run_experiment
 
 BASELINE_NAMES = {"naive_persistence", "linear_regression"}
@@ -35,9 +44,10 @@ class BatchRun:
     config_yaml: str
     config_sha256: str
     run_root: Path
+    matched_plan_path: Path | None = None
 
 
-def run_batch(config_path: Path, limit: int | None = None) -> Path:
+def run_batch(config_path: Path, limit: int | None = None, *, dry_run: bool = False) -> Path:
     raw = _load_yaml(config_path)
     batch = _require_mapping(raw.get("batch"), "batch")
     batch_name = _slug(str(batch["name"]))
@@ -47,6 +57,9 @@ def run_batch(config_path: Path, limit: int | None = None) -> Path:
     base_path = _resolve_path(config_path.parent, Path(raw["base_config"]))
     base_raw = _load_yaml(base_path)
     runs = expand_batch_runs(base_raw, batch, batch_dir)
+    matched_origins = bool(batch.get("matched_origins", False))
+    if matched_origins:
+        _materialize_matched_origin_plans(runs, batch_dir)
     if limit is not None:
         if limit < 1:
             msg = "Batch limit must be positive."
@@ -60,6 +73,12 @@ def run_batch(config_path: Path, limit: int | None = None) -> Path:
     )
     _write_study_metadata(batch_dir, config_path, base_path, raw, len(runs))
     _write_planned_runs(batch_dir, runs)
+    if dry_run:
+        for batch_run in selected_runs:
+            print(f"PLAN {batch_run.run_id}")
+        write_batch_summaries(batch_dir)
+        write_matched_origin_integrity_report(batch_dir)
+        return batch_dir
 
     fail_fast = bool(batch.get("fail_fast", False))
     for batch_run in selected_runs:
@@ -68,17 +87,24 @@ def run_batch(config_path: Path, limit: int | None = None) -> Path:
         existing = _load_metadata(batch_run.run_root / "metadata.yaml")
         if _is_completed(batch_run, existing):
             print(f"SKIP {batch_run.run_id} (already completed)")
+            if existing is not None:
+                existing.update({"last_action": "skipped", "last_checked_at": _now()})
+                _write_metadata(batch_run.run_root / "metadata.yaml", existing)
             continue
 
         started_at = _now()
         metadata = _base_run_metadata(batch_run)
-        metadata.update({"status": "running", "started_at": started_at})
+        metadata.update({"status": "running", "last_action": "running", "started_at": started_at})
         _write_metadata(batch_run.run_root / "metadata.yaml", metadata)
         print(f"RUN  {batch_run.run_id}")
         start = time.perf_counter()
         try:
             result = run_experiment(batch_run.config)
-            validate_run_artifacts(result.run_dir, batch_run.model)
+            validate_run_artifacts(
+                result.run_dir,
+                batch_run.model,
+                matched_plan_path=batch_run.matched_plan_path,
+            )
         except KeyboardInterrupt:
             metadata.update(
                 {
@@ -94,14 +120,20 @@ def run_batch(config_path: Path, limit: int | None = None) -> Path:
             metadata.update(
                 {
                     "status": "failed",
+                    "last_action": "failed",
                     "completed_at": _now(),
                     "duration_seconds": time.perf_counter() - start,
                     "error_type": type(error).__name__,
                     "error": str(error),
                 }
             )
+            if isinstance(error, RecursiveForecastDivergence):
+                metadata.update(error.as_dict())
             _write_metadata(batch_run.run_root / "metadata.yaml", metadata)
             print(f"FAIL {batch_run.run_id}: {type(error).__name__}: {error}")
+            if isinstance(error, MatchedOriginIntegrityError):
+                write_batch_summaries(batch_dir)
+                raise
             if fail_fast:
                 write_batch_summaries(batch_dir)
                 raise
@@ -109,14 +141,31 @@ def run_batch(config_path: Path, limit: int | None = None) -> Path:
             metadata.update(
                 {
                     "status": "completed",
+                    "last_action": "completed",
                     "completed_at": _now(),
                     "duration_seconds": time.perf_counter() - start,
                     "artifact_dir": str(result.run_dir),
                 }
             )
             _write_metadata(batch_run.run_root / "metadata.yaml", metadata)
+            if matched_origins and batch_run.model == "naive_persistence":
+                try:
+                    write_matched_origin_integrity_report(batch_dir)
+                except MatchedOriginIntegrityError as error:
+                    metadata.update(
+                        {
+                            "status": "failed",
+                            "last_action": "failed_integrity",
+                            "error_type": type(error).__name__,
+                            "error": str(error),
+                        }
+                    )
+                    _write_metadata(batch_run.run_root / "metadata.yaml", metadata)
+                    raise
 
     write_batch_summaries(batch_dir)
+    if matched_origins:
+        write_matched_origin_integrity_report(batch_dir)
     return batch_dir
 
 
@@ -144,6 +193,14 @@ def expand_batch_runs(
 
     dataset_names = [str(_require_mapping(item, "batch dataset")["name"]) for item in datasets]
     _validate_unique(dataset_names, "batch dataset names")
+    matched_origins = bool(batch.get("matched_origins", False))
+    warmup_by_market = (
+        _matched_warmup_rows(base_raw, batch, datasets, feature_sets) if matched_origins else {}
+    )
+    plan_paths = {
+        market: batch_dir / "matched_origins" / f"{_slug(market)}_plan.csv"
+        for market in dataset_names
+    }
     runs = []
     for dataset_item in datasets:
         dataset = _require_mapping(dataset_item, "batch dataset")
@@ -165,6 +222,8 @@ def expand_batch_runs(
                         seed,
                         run_id,
                         run_root,
+                        aligned_warmup_rows=warmup_by_market.get(market),
+                        matched_plan_path=plan_paths.get(market) if matched_origins else None,
                     )
                     config = parse_config(run_raw)
                     config_yaml = yaml.safe_dump(run_raw, sort_keys=False)
@@ -179,6 +238,7 @@ def expand_batch_runs(
                             config_yaml=config_yaml,
                             config_sha256=_sha256_bytes(config_yaml.encode()),
                             run_root=run_root,
+                            matched_plan_path=(plan_paths.get(market) if matched_origins else None),
                         )
                     )
     run_ids = [run.run_id for run in runs]
@@ -188,6 +248,103 @@ def expand_batch_runs(
 
 def stable_run_id(market: str, model: str, feature_set: str, seed: int) -> str:
     return "__".join((_slug(market), _slug(model), _slug(feature_set), f"seed{seed}"))
+
+
+def _matched_warmup_rows(
+    base_raw: dict[str, Any],
+    batch: dict[str, Any],
+    datasets: list[Any],
+    feature_sets: dict[str, Any],
+) -> dict[str, int]:
+    required_features = {"close", "indicators"}
+    if set(feature_sets) != required_features:
+        msg = "Matched-origin batches require exactly the close and indicators feature sets."
+        raise ValueError(msg)
+    result: dict[str, int] = {}
+    for dataset_value in datasets:
+        dataset = _require_mapping(dataset_value, "batch dataset")
+        market = str(dataset["name"])
+        warmups = []
+        for feature_name, feature_value in feature_sets.items():
+            feature = _require_mapping(feature_value, f"feature set {feature_name}")
+            probe = copy.deepcopy(base_raw)
+            probe.setdefault("dataset", {}).update(dataset)
+            probe["dataset"]["feature_columns"] = list(
+                feature.get("feature_columns", [probe["dataset"]["target_column"]])
+            )
+            indicators = feature.get("technical_indicators")
+            if indicators is None:
+                probe["dataset"].pop("technical_indicators", None)
+            else:
+                probe["dataset"]["technical_indicators"] = copy.deepcopy(indicators)
+            probe.setdefault("forecasting", {}).update(
+                _require_mapping(batch.get("forecasting", {}), "batch.forecasting")
+            )
+            probe.setdefault("evaluation", {}).update(
+                _require_mapping(batch.get("evaluation", {}), "batch.evaluation")
+            )
+            probe["training"]["models"] = []
+            probe["training"]["baselines"] = ["naive_persistence"]
+            config = parse_config(probe)
+            warmups.append(required_indicator_warmup(config.dataset.technical_indicators))
+        result[market] = max(warmups, default=0)
+    return result
+
+
+def _materialize_matched_origin_plans(runs: list[BatchRun], batch_dir: Path) -> None:
+    by_market: dict[str, BatchRun] = {}
+    for run in runs:
+        by_market.setdefault(run.market, run)
+
+    summary_rows = []
+    for market, run in sorted(by_market.items()):
+        if run.matched_plan_path is None:
+            msg = f"Matched-origin run {run.run_id} has no plan path."
+            raise ValueError(msg)
+        bundle = load_csv_dataset(run.config.dataset)
+        training_dataset = replace(run.config.dataset, horizon=1)
+        samples = make_windowed_samples(
+            bundle,
+            training_dataset.sequence_length,
+            training_dataset.horizon,
+            training_dataset.target_transform,
+        )
+        folds = generate_walk_forward_folds(
+            samples,
+            len(bundle.target_prices),
+            run.config.dataset,
+            run.config.evaluation,
+        )
+        if not folds:
+            msg = f"Matched-origin plan for {market} produced no folds."
+            raise ValueError(msg)
+        fold_rows = [fold_to_dict(fold, samples, bundle, run.config.dataset) for fold in folds]
+        plan = build_plan_frame(folds, fold_rows, bundle, run.config.dataset)
+        write_dataframe(run.matched_plan_path, plan)
+        usable_dates_path = run.matched_plan_path.with_name(f"{_slug(market)}_usable_dates.csv")
+        write_dataframe(
+            usable_dates_path,
+            pd.DataFrame(
+                {
+                    "usable_index": range(len(bundle.dates)),
+                    "date": pd.to_datetime(bundle.dates),
+                }
+            ),
+        )
+        summary_rows.append(
+            {
+                "market": market,
+                "aligned_warmup_rows": run.config.dataset.aligned_warmup_rows,
+                "usable_dates": len(bundle.dates),
+                "folds": len(folds),
+                "forecast_rows": len(plan),
+                "first_origin": plan["forecast_origin"].iloc[0],
+                "last_origin": plan["forecast_origin"].iloc[-1],
+                "plan_path": str(run.matched_plan_path),
+                "plan_sha256": _sha256_file(run.matched_plan_path),
+            }
+        )
+    write_dataframe(batch_dir / "matched_origins" / "market_plans.csv", pd.DataFrame(summary_rows))
 
 
 def _make_run_raw(
@@ -201,6 +358,8 @@ def _make_run_raw(
     seed: int,
     run_id: str,
     run_root: Path,
+    aligned_warmup_rows: int | None = None,
+    matched_plan_path: Path | None = None,
 ) -> dict[str, Any]:
     raw = copy.deepcopy(base_raw)
     raw.setdefault("experiment", {}).update(
@@ -216,15 +375,23 @@ def _make_run_raw(
             raw["dataset"]["technical_indicators"] = copy.deepcopy(indicators)
     if "horizon" in batch:
         raw["dataset"]["horizon"] = int(batch["horizon"])
+    if aligned_warmup_rows is not None:
+        raw["dataset"]["aligned_warmup_rows"] = aligned_warmup_rows
     raw.setdefault("forecasting", {}).update(
         _require_mapping(batch.get("forecasting", {}), "batch.forecasting")
     )
     raw.setdefault("evaluation", {}).update(
         _require_mapping(batch.get("evaluation", {}), "batch.evaluation")
     )
-    raw["training"]["models"] = (
-        [] if model in BASELINE_NAMES else [copy.deepcopy(model_definitions[model])]
-    )
+    if matched_plan_path is not None:
+        raw["evaluation"]["matched_plan_path"] = str(matched_plan_path)
+    model_definition = copy.deepcopy(model_definitions.get(model, {}))
+    model_params = _require_mapping(batch.get("model_params", {}), "batch.model_params")
+    if model in model_params:
+        model_definition["params"] = copy.deepcopy(
+            _require_mapping(model_params[model], f"batch.model_params.{model}")
+        )
+    raw["training"]["models"] = [] if model in BASELINE_NAMES else [model_definition]
     raw["training"]["baselines"] = [model] if model in BASELINE_NAMES else []
     raw["batch_run"] = {
         "id": run_id,
@@ -238,7 +405,7 @@ def _make_run_raw(
 
 def _base_run_metadata(batch_run: BatchRun) -> dict[str, Any]:
     dataset_path = batch_run.config.dataset.csv_path
-    return {
+    payload = {
         "run_id": batch_run.run_id,
         "market": batch_run.market,
         "model": batch_run.model,
@@ -253,7 +420,16 @@ def _base_run_metadata(batch_run: BatchRun) -> dict[str, Any]:
         "forecastle_version": version("forecastle"),
         "torch_version": str(torch.__version__),
         "device_requested": batch_run.config.experiment.device,
+        "divergence": False,
     }
+    if batch_run.matched_plan_path is not None:
+        payload.update(
+            {
+                "matched_plan_path": str(batch_run.matched_plan_path),
+                "matched_plan_sha256": _sha256_file(batch_run.matched_plan_path),
+            }
+        )
+    return payload
 
 
 def _is_completed(batch_run: BatchRun, metadata: dict[str, Any] | None) -> bool:
@@ -261,9 +437,19 @@ def _is_completed(batch_run: BatchRun, metadata: dict[str, Any] | None) -> bool:
         return False
     if metadata.get("config_sha256") != batch_run.config_sha256:
         return False
+    if metadata.get("dataset_sha256") != _sha256_file(batch_run.config.dataset.csv_path):
+        return False
+    if batch_run.matched_plan_path is not None and metadata.get(
+        "matched_plan_sha256"
+    ) != _sha256_file(batch_run.matched_plan_path):
+        return False
     artifact_dir = Path(str(metadata.get("artifact_dir", "")))
     try:
-        validate_run_artifacts(artifact_dir, batch_run.model)
+        validate_run_artifacts(
+            artifact_dir,
+            batch_run.model,
+            matched_plan_path=batch_run.matched_plan_path,
+        )
     except (FileNotFoundError, ValueError):
         return False
     return True
@@ -299,6 +485,10 @@ def _write_planned_runs(batch_dir: Path, runs: list[BatchRun]) -> None:
                 "feature_set": run.feature_set,
                 "seed": run.seed,
                 "config_sha256": run.config_sha256,
+                "aligned_warmup_rows": run.config.dataset.aligned_warmup_rows,
+                "matched_plan_path": (
+                    str(run.matched_plan_path) if run.matched_plan_path is not None else ""
+                ),
             }
             for run in runs
         ]

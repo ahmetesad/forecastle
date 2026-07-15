@@ -9,6 +9,18 @@ if TYPE_CHECKING:
     from forecastle.config import TechnicalIndicatorConfig
 
 
+def required_indicator_warmup(config: TechnicalIndicatorConfig | None) -> int:
+    """Return the number of leading rows without a complete configured feature vector."""
+    if config is None:
+        return 0
+    candidates = [period - 1 for period in config.sma_periods]
+    if config.rsi_period is not None:
+        candidates.append(config.rsi_period)
+    if config.macd is not None:
+        candidates.append(config.macd.slow_period + config.macd.signal_period - 2)
+    return max(candidates, default=0)
+
+
 def add_technical_indicators(
     frame: pd.DataFrame,
     target_column: str,

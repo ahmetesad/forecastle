@@ -184,7 +184,12 @@ def load_csv_dataset(config: DatasetConfig) -> DatasetBundle:
         config.target_column,
         config.technical_indicators,
     )
-    warmup_rows = int(frame.index[0]) if len(frame) else 0
+    indicator_warmup_rows = int(frame.index[0]) if len(frame) else 0
+    warmup_rows = max(indicator_warmup_rows, config.aligned_warmup_rows)
+    frame = frame.loc[frame.index >= warmup_rows]
+    if frame.empty:
+        msg = f"Dataset {config.name!r} has no rows after excluding {warmup_rows} warm-up rows."
+        raise ValueError(msg)
     frame = frame.reset_index(drop=True)
     feature_names = [*base_feature_names, *indicator_names]
     prices = frame[config.target_column].to_numpy(dtype=np.float32)
