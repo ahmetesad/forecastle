@@ -407,9 +407,11 @@ uv sync --frozen --dev
 uv run forecastle batch --config configs/batches/markets_matched_origins_recursive_h20.yaml
 ```
 
-The command is resume-safe. Successful runs are validated and skipped; failed or interrupted runs
-are attempted again. Use `--limit 1` for a quick orchestration check. Run IDs are deterministic and
-include every varied batch dimension, for example
+The command is resume-safe. Successful runs are validated and skipped. Interrupted or incomplete
+runs are attempted again. A failed run whose config, dataset, matched plan, and source revision are
+unchanged remains recorded as failed; pass `--retry-failed` to attempt it again. Use `--limit 1` for
+a quick orchestration check. Run IDs are deterministic and include every varied batch dimension,
+for example
 `wig20__cnn1d__close__seed42`.
 
 The stable output directory is
@@ -462,6 +464,59 @@ It preserves the matched plans and integrity report, all run outcomes, aggregate
 tables, divergence records, and key plots. The principal result is market-dependent: persistence
 remains strongest on WIG20 and BIST100, while technical-indicator CNN1D beats persistence on the
 S&P 500 in all five seeds and at all 20 recursive horizons.
+
+### Direct versus recursive and rolling versus expanding
+
+Two follow-up batches reuse the canonical dated forecast schedule committed with the recursive
+expanding study:
+
+- `markets_matched_origins_direct_h20` compares direct endpoint forecasts at `t+20` with the
+  canonical recursive forecasts at `horizon_step=20`.
+- `markets_matched_origins_rolling_recursive_h20` compares a rolling training window with the
+  canonical expanding window while retaining recursive steps 1 through 20.
+
+Each batch contains the same 180 market/model/feature/seed combinations as the canonical study.
+The source plans contribute forecast origins, target dates, and horizons only. Forecastle derives
+new strategy-specific fold boundaries, so direct training uses horizon-20 samples and rolling
+training uses its configured fixed historical window.
+
+Resolve both matrices without training:
+
+```bash
+uv run forecastle batch \
+  --config configs/batches/markets_matched_origins_direct_h20.yaml \
+  --dry-run
+
+uv run forecastle batch \
+  --config configs/batches/markets_matched_origins_rolling_recursive_h20.yaml \
+  --dry-run
+```
+
+Run or resume them:
+
+```bash
+uv run forecastle batch \
+  --config configs/batches/markets_matched_origins_direct_h20.yaml
+
+uv run forecastle batch \
+  --config configs/batches/markets_matched_origins_rolling_recursive_h20.yaml
+```
+
+After a batch completes, generate paired reports:
+
+```bash
+uv run forecastle compare \
+  --config configs/comparisons/direct_vs_recursive_h20.yaml
+
+uv run forecastle compare \
+  --config configs/comparisons/rolling_vs_expanding_recursive_h20.yaml
+```
+
+The direct comparison pairs only direct `t+20` with recursive `horizon_step=20`; it never implies
+that direct forecasts exist for steps 1 through 19. The rolling comparison also writes paired
+per-fold and per-horizon summaries. Both comparison commands verify dated schedules and persistence
+controls before writing RMSE/MAE deltas, seed win counts, coverage tables, Markdown summaries, and
+plots under `outputs/comparisons/`. Return MAPE is not used for ranking.
 
 Forecastle uses Matplotlib's non-interactive `Agg` backend for file artifacts, including when
 Kaggle or Colab exports a notebook backend that is unavailable inside the isolated `uv` environment.

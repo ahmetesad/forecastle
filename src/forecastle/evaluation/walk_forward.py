@@ -135,7 +135,13 @@ def run_walk_forward(config: AppConfig) -> ExperimentResult:
         fold_rows.append(fold_to_dict(fold, samples, bundle, config.dataset))
 
     if matched_plan is not None:
-        actual_plan = build_plan_frame(folds, fold_rows, bundle, config.dataset)
+        actual_plan = build_plan_frame(
+            folds,
+            fold_rows,
+            bundle,
+            config.dataset,
+            config.forecasting.strategy,
+        )
         validate_plan_frame(actual_plan, matched_plan, config.dataset.name)
 
     comparison_rows, fold_metrics, horizon_metrics = summarize_forecasts(records, summaries)

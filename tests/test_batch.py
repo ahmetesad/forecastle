@@ -258,6 +258,39 @@ def test_batch_records_structured_recursive_divergence(tmp_path, monkeypatch) ->
     assert rankings.loc[0, "failed_combinations"] == 1
 
 
+def test_batch_preserves_unchanged_failures_unless_retry_is_requested(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config_path = _write_single_run_batch(tmp_path)
+    calls = 0
+
+    def diverge(_config):
+        nonlocal calls
+        calls += 1
+        raise RecursiveForecastDivergence(
+            model="linear_regression",
+            fold=4,
+            forecast_origin="2025-01-02T00:00:00",
+            horizon_step=12,
+            previous_price=123.0,
+            predicted_target=1_000.0,
+            reconstructed_price=float("inf"),
+        )
+
+    monkeypatch.setattr(batch_module, "_git_revision", lambda: "fixed-revision")
+    monkeypatch.setattr(batch_module, "run_experiment", diverge)
+    batch_dir = run_batch(config_path)
+    run_batch(config_path)
+    assert calls == 1
+    metadata_path = batch_dir / "runs/synthetic__linear_regression__close__seed7/metadata.yaml"
+    assert load_yaml(metadata_path)["last_action"] == "skipped_failed"
+
+    run_batch(config_path, retry_failed=True)
+    assert calls == 2
+    assert load_yaml(metadata_path)["last_action"] == "failed"
+
+
 def test_matched_batch_dry_run_materializes_matrix_without_experiments(
     tmp_path,
     monkeypatch,
@@ -278,6 +311,57 @@ def test_matched_batch_dry_run_materializes_matrix_without_experiments(
     assert not (batch_dir / "runs").exists()
 
 
+def test_direct_and_rolling_batches_reuse_canonical_forecast_schedule(tmp_path) -> None:
+    canonical_config = _write_single_run_batch(
+        tmp_path,
+        matched=True,
+        include_indicators=True,
+        name="canonical",
+        max_folds=3,
+    )
+    canonical_dir = run_batch(canonical_config, dry_run=True)
+    source_path = canonical_dir / "matched_origins/synthetic_plan.csv"
+    canonical_plan = pd.read_csv(source_path)
+
+    direct_config = _write_single_run_batch(
+        tmp_path,
+        matched=True,
+        include_indicators=True,
+        name="direct",
+        strategy="direct",
+        max_folds=3,
+        origin_schedule_source=source_path,
+    )
+    direct_dir = run_batch(direct_config, dry_run=True)
+    direct_plan = pd.read_csv(direct_dir / "matched_origins/synthetic_plan.csv")
+    assert direct_plan["horizon_step"].unique().tolist() == [2]
+    expected_direct = canonical_plan[canonical_plan["horizon_step"].eq(2)][
+        ["fold", "forecast_origin", "target_date", "horizon_step"]
+    ].reset_index(drop=True)
+    pd.testing.assert_frame_equal(
+        direct_plan[["fold", "forecast_origin", "target_date", "horizon_step"]],
+        expected_direct,
+    )
+
+    rolling_config = _write_single_run_batch(
+        tmp_path,
+        matched=True,
+        include_indicators=True,
+        name="rolling",
+        window="rolling",
+        max_folds=3,
+        origin_schedule_source=source_path,
+    )
+    rolling_dir = run_batch(rolling_config, dry_run=True)
+    rolling_plan = pd.read_csv(rolling_dir / "matched_origins/synthetic_plan.csv")
+    pd.testing.assert_frame_equal(
+        rolling_plan[["fold", "forecast_origin", "target_date", "horizon_step"]],
+        canonical_plan[["fold", "forecast_origin", "target_date", "horizon_step"]],
+    )
+    assert rolling_plan.groupby("fold")["train_samples"].first().nunique() == 1
+    assert canonical_plan.groupby("fold")["train_samples"].first().nunique() > 1
+
+
 def _run_small_matched_persistence_batch(tmp_path) -> Path:
     return run_batch(_write_single_run_batch(tmp_path, matched=True, include_indicators=True))
 
@@ -287,6 +371,11 @@ def _write_single_run_batch(
     *,
     matched: bool = False,
     include_indicators: bool = False,
+    name: str = "helper_batch",
+    strategy: str = "recursive",
+    window: str = "expanding",
+    max_folds: int = 1,
+    origin_schedule_source: Path | None = None,
 ) -> Path:
     csv_path = tmp_path / "helper_prices.csv"
     values = np.linspace(100.0, 130.0, 120)
@@ -334,34 +423,37 @@ def _write_single_run_batch(
                 "macd": {"fast_period": 2, "slow_period": 4, "signal_period": 2},
             },
         }
-    config_path = tmp_path / "helper_batch.yaml"
+    batch_payload = {
+        "name": name,
+        "output_dir": str(tmp_path / "helper_batches"),
+        "matched_origins": matched,
+        "datasets": [
+            {
+                "name": "synthetic",
+                "csv_path": str(csv_path),
+                "date_column": "Date",
+                "target_column": "Close",
+            }
+        ],
+        "models": ["naive_persistence" if matched else "linear_regression"],
+        "feature_sets": feature_sets,
+        "seeds": [7],
+        "horizon": 2,
+        "forecasting": {"strategy": strategy},
+        "evaluation": {
+            "strategy": "walk_forward",
+            "window": window,
+            "max_folds": max_folds,
+        },
+    }
+    if origin_schedule_source is not None:
+        batch_payload["origin_schedule_sources"] = {"synthetic": str(origin_schedule_source)}
+    config_path = tmp_path / f"{name}.yaml"
     config_path.write_text(
         yaml.safe_dump(
             {
                 "base_config": str(base_path),
-                "batch": {
-                    "name": "helper_batch",
-                    "output_dir": str(tmp_path / "helper_batches"),
-                    "matched_origins": matched,
-                    "datasets": [
-                        {
-                            "name": "synthetic",
-                            "csv_path": str(csv_path),
-                            "date_column": "Date",
-                            "target_column": "Close",
-                        }
-                    ],
-                    "models": ["naive_persistence" if matched else "linear_regression"],
-                    "feature_sets": feature_sets,
-                    "seeds": [7],
-                    "horizon": 2,
-                    "forecasting": {"strategy": "recursive"},
-                    "evaluation": {
-                        "strategy": "walk_forward",
-                        "window": "expanding",
-                        "max_folds": 1,
-                    },
-                },
+                "batch": batch_payload,
             },
             sort_keys=False,
         ),

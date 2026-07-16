@@ -1,0 +1,13 @@
+comparison:
+  name: direct_vs_recursive_h20
+  kind: direct_vs_recursive
+  horizon_step: 20
+  output_dir: outputs/comparisons
+
+  reference:
+    label: recursive_expanding
+    batch_dir: results/experiments/markets_matched_origins_recursive_h20
+
+  candidate:
+    label: direct_expanding
+    batch_dir: outputs/batches/markets_matched_origins_direct_h20

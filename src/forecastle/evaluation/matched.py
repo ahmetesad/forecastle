@@ -9,7 +9,7 @@ from forecastle.evaluation.forecasting import format_date
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from forecastle.config import DatasetConfig
+    from forecastle.config import DatasetConfig, ForecastStrategy
     from forecastle.data import DatasetBundle
     from forecastle.evaluation.walk_forward import WalkForwardFold
 
@@ -58,11 +58,44 @@ def plan_origin_indices(plan: pd.DataFrame, bundle: DatasetBundle) -> list[int]:
     return [index_by_date[date] for date in origins["forecast_origin"]]
 
 
+def select_forecast_schedule(
+    plan: pd.DataFrame,
+    strategy: ForecastStrategy,
+    horizon: int,
+) -> pd.DataFrame:
+    schedule = _normalize_plan(plan)[PLAN_KEY].drop_duplicates()
+    if strategy == "direct":
+        schedule = schedule[schedule["horizon_step"].eq(horizon)]
+    if schedule.empty:
+        msg = f"Matched-origin source contains no {strategy} horizon-{horizon} forecast rows."
+        raise MatchedOriginIntegrityError(msg)
+    return schedule.sort_values(PLAN_KEY).reset_index(drop=True)
+
+
+def validate_forecast_schedule(
+    actual: pd.DataFrame,
+    source: pd.DataFrame,
+    strategy: ForecastStrategy,
+    horizon: int,
+    context: str,
+) -> None:
+    actual_schedule = select_forecast_schedule(actual, strategy, horizon)
+    source_schedule = select_forecast_schedule(source, strategy, horizon)
+    if actual_schedule.equals(source_schedule):
+        return
+    msg = (
+        f"Forecast schedule integrity failed for {context}: expected "
+        f"{len(source_schedule)} dated forecast rows and found {len(actual_schedule)}."
+    )
+    raise MatchedOriginIntegrityError(msg)
+
+
 def build_plan_frame(
     folds: list[WalkForwardFold],
     fold_rows: list[dict[str, Any]],
     bundle: DatasetBundle,
     dataset_config: DatasetConfig,
+    strategy: ForecastStrategy = "recursive",
 ) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
     for fold, fold_row in zip(folds, fold_rows, strict=True):
@@ -70,7 +103,14 @@ def build_plan_frame(
             dataset_config.horizon,
             len(bundle.target_prices) - fold.origin_index - 1,
         )
-        for horizon_step in range(1, available_steps + 1):
+        horizon_steps = (
+            [dataset_config.horizon]
+            if strategy == "direct" and available_steps >= dataset_config.horizon
+            else range(1, available_steps + 1)
+            if strategy == "recursive"
+            else []
+        )
+        for horizon_step in horizon_steps:
             rows.append(
                 {
                     **fold_row,

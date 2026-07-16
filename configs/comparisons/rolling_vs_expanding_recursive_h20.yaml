@@ -1,0 +1,13 @@
+comparison:
+  name: rolling_vs_expanding_recursive_h20
+  kind: rolling_vs_expanding
+  horizon_step: 20
+  output_dir: outputs/comparisons
+
+  reference:
+    label: expanding_recursive
+    batch_dir: results/experiments/markets_matched_origins_recursive_h20
+
+  candidate:
+    label: rolling_recursive
+    batch_dir: outputs/batches/markets_matched_origins_rolling_recursive_h20

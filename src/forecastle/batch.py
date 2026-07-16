@@ -23,7 +23,14 @@ from forecastle.config import AppConfig, parse_config
 from forecastle.data.csv_dataset import load_csv_dataset, make_windowed_samples
 from forecastle.data.indicators import required_indicator_warmup
 from forecastle.evaluation.errors import RecursiveForecastDivergence
-from forecastle.evaluation.matched import MatchedOriginIntegrityError, build_plan_frame
+from forecastle.evaluation.matched import (
+    MatchedOriginIntegrityError,
+    build_plan_frame,
+    load_matched_plan,
+    plan_origin_indices,
+    select_forecast_schedule,
+    validate_forecast_schedule,
+)
 from forecastle.evaluation.walk_forward import (
     fold_to_dict,
     generate_walk_forward_folds,
@@ -47,7 +54,13 @@ class BatchRun:
     matched_plan_path: Path | None = None
 
 
-def run_batch(config_path: Path, limit: int | None = None, *, dry_run: bool = False) -> Path:
+def run_batch(
+    config_path: Path,
+    limit: int | None = None,
+    *,
+    dry_run: bool = False,
+    retry_failed: bool = False,
+) -> Path:
     raw = _load_yaml(config_path)
     batch = _require_mapping(raw.get("batch"), "batch")
     batch_name = _slug(str(batch["name"]))
@@ -59,7 +72,7 @@ def run_batch(config_path: Path, limit: int | None = None, *, dry_run: bool = Fa
     runs = expand_batch_runs(base_raw, batch, batch_dir)
     matched_origins = bool(batch.get("matched_origins", False))
     if matched_origins:
-        _materialize_matched_origin_plans(runs, batch_dir)
+        _materialize_matched_origin_plans(runs, batch_dir, batch)
     if limit is not None:
         if limit < 1:
             msg = "Batch limit must be positive."
@@ -89,6 +102,12 @@ def run_batch(config_path: Path, limit: int | None = None, *, dry_run: bool = Fa
             print(f"SKIP {batch_run.run_id} (already completed)")
             if existing is not None:
                 existing.update({"last_action": "skipped", "last_checked_at": _now()})
+                _write_metadata(batch_run.run_root / "metadata.yaml", existing)
+            continue
+        if not retry_failed and _is_unchanged_failed(batch_run, existing):
+            print(f"SKIP {batch_run.run_id} (unchanged failed run; use --retry-failed)")
+            if existing is not None:
+                existing.update({"last_action": "skipped_failed", "last_checked_at": _now()})
                 _write_metadata(batch_run.run_root / "metadata.yaml", existing)
             continue
 
@@ -291,10 +310,27 @@ def _matched_warmup_rows(
     return result
 
 
-def _materialize_matched_origin_plans(runs: list[BatchRun], batch_dir: Path) -> None:
+def _materialize_matched_origin_plans(
+    runs: list[BatchRun],
+    batch_dir: Path,
+    batch: dict[str, Any],
+) -> None:
     by_market: dict[str, BatchRun] = {}
     for run in runs:
         by_market.setdefault(run.market, run)
+
+    source_values = _require_mapping(
+        batch.get("origin_schedule_sources", {}),
+        "batch.origin_schedule_sources",
+    )
+    unknown_sources = sorted(set(source_values).difference(by_market))
+    if unknown_sources:
+        msg = f"Origin schedule sources reference unknown markets: {unknown_sources}."
+        raise ValueError(msg)
+    missing_sources = sorted(set(by_market).difference(source_values)) if source_values else []
+    if missing_sources:
+        msg = f"Origin schedule sources are missing markets: {missing_sources}."
+        raise ValueError(msg)
 
     summary_rows = []
     for market, run in sorted(by_market.items()):
@@ -302,24 +338,54 @@ def _materialize_matched_origin_plans(runs: list[BatchRun], batch_dir: Path) -> 
             msg = f"Matched-origin run {run.run_id} has no plan path."
             raise ValueError(msg)
         bundle = load_csv_dataset(run.config.dataset)
-        training_dataset = replace(run.config.dataset, horizon=1)
+        training_horizon = (
+            1 if run.config.forecasting.strategy == "recursive" else run.config.dataset.horizon
+        )
+        training_dataset = replace(run.config.dataset, horizon=training_horizon)
         samples = make_windowed_samples(
             bundle,
             training_dataset.sequence_length,
             training_dataset.horizon,
             training_dataset.target_transform,
         )
+        source_path: Path | None = None
+        source_plan: pd.DataFrame | None = None
+        matched_origin_indices: list[int] | None = None
+        if market in source_values:
+            source_path = _resolve_path(Path.cwd(), Path(str(source_values[market])))
+            source_plan = load_matched_plan(source_path)
+            source_schedule = select_forecast_schedule(
+                source_plan,
+                run.config.forecasting.strategy,
+                run.config.dataset.horizon,
+            )
+            matched_origin_indices = plan_origin_indices(source_schedule, bundle)
         folds = generate_walk_forward_folds(
             samples,
             len(bundle.target_prices),
             run.config.dataset,
             run.config.evaluation,
+            matched_origin_indices=matched_origin_indices,
         )
         if not folds:
             msg = f"Matched-origin plan for {market} produced no folds."
             raise ValueError(msg)
         fold_rows = [fold_to_dict(fold, samples, bundle, run.config.dataset) for fold in folds]
-        plan = build_plan_frame(folds, fold_rows, bundle, run.config.dataset)
+        plan = build_plan_frame(
+            folds,
+            fold_rows,
+            bundle,
+            run.config.dataset,
+            run.config.forecasting.strategy,
+        )
+        if source_plan is not None:
+            validate_forecast_schedule(
+                plan,
+                source_plan,
+                run.config.forecasting.strategy,
+                run.config.dataset.horizon,
+                market,
+            )
         write_dataframe(run.matched_plan_path, plan)
         usable_dates_path = run.matched_plan_path.with_name(f"{_slug(market)}_usable_dates.csv")
         write_dataframe(
@@ -342,6 +408,10 @@ def _materialize_matched_origin_plans(runs: list[BatchRun], batch_dir: Path) -> 
                 "last_origin": plan["forecast_origin"].iloc[-1],
                 "plan_path": str(run.matched_plan_path),
                 "plan_sha256": _sha256_file(run.matched_plan_path),
+                "origin_schedule_source": str(source_path) if source_path is not None else "",
+                "origin_schedule_source_sha256": (
+                    _sha256_file(source_path) if source_path is not None else ""
+                ),
             }
         )
     write_dataframe(batch_dir / "matched_origins" / "market_plans.csv", pd.DataFrame(summary_rows))
@@ -453,6 +523,20 @@ def _is_completed(batch_run: BatchRun, metadata: dict[str, Any] | None) -> bool:
     except (FileNotFoundError, ValueError):
         return False
     return True
+
+
+def _is_unchanged_failed(batch_run: BatchRun, metadata: dict[str, Any] | None) -> bool:
+    if metadata is None or metadata.get("status") != "failed":
+        return False
+    if metadata.get("config_sha256") != batch_run.config_sha256:
+        return False
+    if metadata.get("dataset_sha256") != _sha256_file(batch_run.config.dataset.csv_path):
+        return False
+    if metadata.get("git_revision") != _git_revision():
+        return False
+    return batch_run.matched_plan_path is None or metadata.get(
+        "matched_plan_sha256"
+    ) == _sha256_file(batch_run.matched_plan_path)
 
 
 def _write_study_metadata(
