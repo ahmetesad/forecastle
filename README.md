@@ -456,6 +456,13 @@ not a controlled ablation and is not reused by the canonical study. The committe
 the study definition, manifest, aggregate and horizon tables, seed summaries, and key plots, while
 excluding checkpoints and raw per-run output directories.
 
+The completed canonical study is available under
+[`results/experiments/markets_matched_origins_recursive_h20/`](results/experiments/markets_matched_origins_recursive_h20/).
+It preserves the matched plans and integrity report, all run outcomes, aggregate/seed/fold/horizon
+tables, divergence records, and key plots. The principal result is market-dependent: persistence
+remains strongest on WIG20 and BIST100, while technical-indicator CNN1D beats persistence on the
+S&P 500 in all five seeds and at all 20 recursive horizons.
+
 Forecastle uses Matplotlib's non-interactive `Agg` backend for file artifacts, including when
 Kaggle or Colab exports a notebook backend that is unavailable inside the isolated `uv` environment.
 

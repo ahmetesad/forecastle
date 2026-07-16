@@ -1,0 +1,77 @@
+batch_config: configs/batches/markets_matched_origins_recursive_h20.yaml
+batch_config_sha256: 88544f4c7f5a7999fc44035948833a69a69f7c84d0ae31a57dd23117aa355da8
+base_config: configs/evaluation/wig20_walk_forward_recursive.yaml
+base_config_sha256: 143daf775a6cd5aaede1ef8bd8cecbc71a356f1f01be88c338928bf30e889253
+planned_runs: 180
+git_revision: 35d78471bb69131d11d7a802603232a9a20a0523
+updated_at: '2026-07-16T15:31:26.028734+00:00'
+batch:
+  name: markets_matched_origins_recursive_h20
+  output_dir: outputs/batches
+  matched_origins: true
+  fail_fast: false
+  datasets:
+  - name: wig20
+    source: csv
+    csv_path: data/raw/wig20.csv
+    date_column: Date
+    target_column: Close
+  - name: sp500
+    source: csv
+    csv_path: data/raw/sp500.csv
+    date_column: Date
+    target_column: Close
+  - name: bist100
+    source: csv
+    csv_path: data/raw/bist100.csv
+    date_column: Date
+    target_column: Close
+  models:
+  - naive_persistence
+  - linear_regression
+  - cnn1d
+  - mlp
+  - lstm_gru
+  - dnfs
+  model_params:
+    dnfs:
+      encoder_type: gru
+      consequent_type: first_order
+      num_rules: 8
+      usage_regularization: 0.001
+      rule_initialization: kmeans
+  feature_sets:
+    close:
+      feature_columns:
+      - Close
+      technical_indicators: null
+    indicators:
+      feature_columns:
+      - Close
+      technical_indicators:
+        sma_periods:
+        - 5
+        - 10
+        - 15
+        - 20
+        rsi_period: 14
+        macd:
+          fast_period: 12
+          slow_period: 26
+          signal_period: 9
+  seeds:
+  - 1
+  - 7
+  - 42
+  - 123
+  - 2026
+  horizon: 20
+  forecasting:
+    strategy: recursive
+  evaluation:
+    strategy: walk_forward
+    window: expanding
+    step_size: null
+    validation_size: null
+    train_window_size: null
+    max_folds: null

@@ -1,0 +1,4 @@
+market,aligned_warmup_rows,usable_dates,folds,forecast_rows,first_origin,last_origin,plan_path,plan_sha256
+bist100,33,6598,50,986,2022-07-26T00:00:00,2026-06-30T00:00:00,outputs/batches/markets_matched_origins_recursive_h20/matched_origins/bist100_plan.csv,59f06038600018214f62038499769eec075ee134d56e6d17fb6ff489a0c534bd
+sp500,33,6634,50,992,2022-07-22T00:00:00,2026-06-18T00:00:00,outputs/batches/markets_matched_origins_recursive_h20/matched_origins/sp500_plan.csv,e760771130e8f247788479405024568e8a1726b48b830fc53e0821f6a98dadce
+wig20,33,4966,38,741,2023-07-14T00:00:00,2026-07-03T00:00:00,outputs/batches/markets_matched_origins_recursive_h20/matched_origins/wig20_plan.csv,3a4a48336928c88cc3e55b613743550c1da8bb8af679d0347b003bc902c6cf3a

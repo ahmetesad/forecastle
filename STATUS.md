@@ -93,6 +93,24 @@ runs. Its generated indicator-effect tables are therefore retained but explicitl
 confounded. Curated configs, manifests, summaries, horizon tables, and plots are under
 [`results/experiments/markets_indicators_recursive_h20_exploratory/`](results/experiments/markets_indicators_recursive_h20_exploratory/).
 
+### Canonical matched-origin three-market batch
+
+The controlled replacement uses identical usable dates, folds, forecast origins, targets, horizons,
+and prediction counts across Close-only and indicator conditions for each market. All 175 completed
+runs passed the canonical plan checks, and all 15 persistence feature pairs produced identical
+predictions and metrics. Five BIST100 indicator linear-regression runs failed at the same
+deterministic recursive divergence; all other combinations completed.
+
+Persistence remains strongest on WIG20 and BIST100. On the S&P 500, Close-only linear regression
+and LSTM-GRU beat persistence in all five seeds. Indicator CNN1D is the strongest result: it lowers
+price RMSE by 8.01% versus persistence, wins in every seed, and remains best at all 20 recursive
+horizons. Indicators improve that CNN1D by 9.15% relative to its matched Close-only condition.
+Indicators provide little or negative value on WIG20 and mixed, noncompetitive changes on BIST100.
+
+The curated plans, integrity evidence, manifests, summaries, fold/horizon tables, divergence
+records, and plots are under
+[`results/experiments/markets_matched_origins_recursive_h20/`](results/experiments/markets_matched_origins_recursive_h20/).
+
 ## Research artifact policy
 
 `outputs/`, checkpoints, Optuna databases, and temporary runs remain ignored. The three datasets
@@ -105,27 +123,31 @@ or easily regenerated artifacts.
 
 ## Known limitations
 
-- The canonical walk-forward result currently uses one deterministic seed.
-- The DNFS ablation uses five seeds but only five walk-forward origins and one market.
+- The original all-model WIG20 walk-forward result uses one deterministic seed; the canonical batch
+  covers six selected models with five seeds.
+- The focused DNFS ablation uses five seeds but only five walk-forward origins and one market.
 - Recursive forecasting supports only Close and generated Close-derived indicators.
 - Direct forecasting predicts one endpoint at `t+h`; it is not a multi-output sequence decoder.
 - Hybrid-specific Optuna search spaces are not implemented.
 - Walk-forward training is sequential and can be slow across many models and folds.
 - Committed market snapshots are static and must be refreshed deliberately when extending the study.
-- The current evidence does not isolate indicator effects from recursive-vs-direct strategy effects.
+- Indicator effects are controlled within recursive forecasting, but direct-versus-recursive and
+  rolling-versus-expanding comparisons remain outstanding.
 - Earlier exploratory ablation and seed runs preceded the model-order randomness fix and are not
   treated as canonical results.
+- The S&P 500 indicator-CNN1D gain is stable across seeds and horizons but partly concentrated in
+  favorable folds.
+- BIST100 linear regression with indicators is numerically unstable under recursive forecasting.
 
 ## Remaining work
 
-1. Rerun the matched WIG20 indicator and direct-vs-recursive ablation from the fixed implementation.
-2. Run at least three post-fix deterministic seeds for persistence and the strongest non-DNFS challengers.
-3. Run full rolling-window evaluation and compare rankings with expanding windows.
-4. Reproduce the canonical protocol on BIST100 and S&P 500 and test parameter transfer.
-5. Add uncertainty estimates or statistical tests across folds and seeds.
+1. Compare direct horizon-20 forecasting against recursive step 20 on matched origins.
+2. Run rolling-window evaluation and compare rankings with expanding windows.
+3. Add confidence intervals or formal statistical tests across folds and seeds.
+4. Investigate the deterministic BIST100 indicator linear-regression divergence without hiding it
+   through clipping or fallback predictions.
+5. Test whether market-specific tuning changes the cross-market conclusions.
 6. Consider parallel fold/trial execution after reproducibility guarantees are preserved.
-7. Run and curate the configured three-market, two-feature, five-seed batch study.
-8. Replicate the recommended DNFS configuration on BIST100 and S&P 500 with more walk-forward origins.
 
 ## Useful commands
 
