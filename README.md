@@ -518,6 +518,14 @@ per-fold and per-horizon summaries. Both comparison commands verify dated schedu
 controls before writing RMSE/MAE deltas, seed win counts, coverage tables, Markdown summaries, and
 plots under `outputs/comparisons/`. Return MAPE is not used for ranking.
 
+The completed follow-up studies are curated under
+[`results/experiments/markets_matched_origins_direct_h20/`](results/experiments/markets_matched_origins_direct_h20/),
+[`results/experiments/markets_matched_origins_rolling_recursive_h20/`](results/experiments/markets_matched_origins_rolling_recursive_h20/),
+and [`results/comparisons/`](results/comparisons/). Direct forecasting is not uniformly better than
+recursive step 20, and rolling windows are not uniformly better than expanding windows. Persistence
+still leads WIG20 and BIST100; S&P 500 indicator CNN1D remains the strongest repeatable learned
+result.
+
 Forecastle uses Matplotlib's non-interactive `Agg` backend for file artifacts, including when
 Kaggle or Colab exports a notebook backend that is unavailable inside the isolated `uv` environment.
 

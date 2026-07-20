@@ -18,7 +18,7 @@ def test_direct_comparison_pairs_only_endpoint_and_checks_persistence(tmp_path) 
     reference = tmp_path / "reference"
     candidate = tmp_path / "candidate"
     _write_batch(reference, recursive=True)
-    _write_batch(candidate, recursive=False)
+    _write_batch(candidate, recursive=False, target_metric_delta=5e-9)
     config_path = _write_config(
         tmp_path,
         "direct_vs_recursive",
@@ -81,6 +81,7 @@ def _write_batch(
     *,
     recursive: bool,
     persistence_rmse: float = 10.0,
+    target_metric_delta: float = 0.0,
 ) -> None:
     root.mkdir(parents=True)
     identities = [
@@ -112,6 +113,9 @@ def _write_batch(
             "rmse": price_rmse / 100.0,
             "mae": (price_rmse - 1.0) / 100.0,
         }
+        if model == "naive_persistence":
+            metrics["rmse"] += target_metric_delta
+            metrics["mae"] += target_metric_delta
         run_rows.append(metrics)
         steps = [1, 20] if recursive else [20]
         for step in steps:

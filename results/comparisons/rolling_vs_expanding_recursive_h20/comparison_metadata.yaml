@@ -1,0 +1,15 @@
+candidate_batch_dir: outputs/batches/markets_matched_origins_rolling_recursive_h20
+candidate_label: rolling_recursive
+created_at: '2026-07-17T12:05:32.519013+00:00'
+horizon_step: 20
+kind: rolling_vs_expanding
+name: rolling_vs_expanding_recursive_h20
+paired_runs: 175
+ranking_metrics:
+- price_rmse
+- price_mae
+- rmse
+- mae
+reference_batch_dir: results/experiments/markets_matched_origins_recursive_h20
+reference_label: expanding_recursive
+return_mape_used_for_ranking: false

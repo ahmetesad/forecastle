@@ -1,0 +1,14 @@
+| feature_set | model | combinations | complete_combinations | incomplete_combinations | failed_combinations | planned_runs | completed_runs | failed_runs | divergence_count | mean_price_rmse_rank | std_price_rmse_rank | mean_ratio_to_persistence | runs |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| close | naive_persistence | 3 | 3 | 0 | 0 | 15 | 15 | 0 | 0 | 2.2 | 1.65616 | 1 | 15 |
+| close | lstm_gru | 3 | 3 | 0 | 0 | 15 | 15 | 0 | 0 | 3 | 1.19523 | 1.04256 | 15 |
+| close | mlp | 3 | 3 | 0 | 0 | 15 | 15 | 0 | 0 | 3.4 | 1.12122 | 1.22223 | 15 |
+| close | dnfs | 3 | 3 | 0 | 0 | 15 | 15 | 0 | 0 | 3.6 | 1.72378 | 1.04567 | 15 |
+| close | linear_regression | 3 | 3 | 0 | 0 | 15 | 15 | 0 | 0 | 4.2 | 1.97122 | 1.34877 | 15 |
+| close | cnn1d | 3 | 3 | 0 | 0 | 15 | 15 | 0 | 0 | 4.6 | 1.59463 | 1.81874 | 15 |
+| indicators | naive_persistence | 3 | 3 | 0 | 0 | 15 | 15 | 0 | 0 | 1.8 | 1.26491 | 1 | 15 |
+| indicators | cnn1d | 3 | 3 | 0 | 0 | 15 | 15 | 0 | 0 | 3.06667 | 1.62422 | 1.75916 | 15 |
+| indicators | dnfs | 3 | 3 | 0 | 0 | 15 | 15 | 0 | 0 | 3.13333 | 1.84649 | 1.03938 | 15 |
+| indicators | lstm_gru | 3 | 3 | 0 | 0 | 15 | 15 | 0 | 0 | 3.46667 | 0.833809 | 1.05967 | 15 |
+| indicators | mlp | 3 | 3 | 0 | 0 | 15 | 15 | 0 | 0 | 3.93333 | 1.27988 | 1.68539 | 15 |
+| indicators | linear_regression | 3 | 3 | 0 | 0 | 15 | 15 | 0 | 0 | 5.6 | 0.632456 | 2.01532 | 15 |

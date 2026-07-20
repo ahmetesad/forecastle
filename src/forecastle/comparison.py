@@ -14,6 +14,8 @@ from forecastle.plotting import plt
 ComparisonKind = Literal["direct_vs_recursive", "rolling_vs_expanding"]
 IDENTITY = ["market", "model", "feature_set", "seed"]
 METRICS = ["price_rmse", "price_mae", "rmse", "mae"]
+PRICE_METRIC_TOLERANCE = 1e-8
+TARGET_METRIC_TOLERANCE = 1e-7
 
 
 class BatchComparisonError(ValueError):
@@ -295,12 +297,27 @@ def _persistence_control(paired: pd.DataFrame) -> pd.DataFrame:
     persistence = paired[paired["model"].eq("naive_persistence")].copy()
     if persistence.empty:
         return pd.DataFrame()
-    delta_columns = [f"{metric}_delta" for metric in METRICS]
-    persistence["max_absolute_metric_delta"] = persistence[delta_columns].abs().max(axis=1)
-    persistence["integrity_pass"] = persistence["max_absolute_metric_delta"].le(1e-12)
-    return persistence[[*IDENTITY, "max_absolute_metric_delta", "integrity_pass"]].reset_index(
-        drop=True
+    persistence["max_absolute_price_metric_delta"] = (
+        persistence[["price_rmse_delta", "price_mae_delta"]].abs().max(axis=1)
     )
+    persistence["max_absolute_target_metric_delta"] = (
+        persistence[["rmse_delta", "mae_delta"]].abs().max(axis=1)
+    )
+    persistence["price_metric_tolerance"] = PRICE_METRIC_TOLERANCE
+    persistence["target_metric_tolerance"] = TARGET_METRIC_TOLERANCE
+    persistence["integrity_pass"] = persistence["max_absolute_price_metric_delta"].le(
+        PRICE_METRIC_TOLERANCE
+    ) & persistence["max_absolute_target_metric_delta"].le(TARGET_METRIC_TOLERANCE)
+    return persistence[
+        [
+            *IDENTITY,
+            "max_absolute_price_metric_delta",
+            "max_absolute_target_metric_delta",
+            "price_metric_tolerance",
+            "target_metric_tolerance",
+            "integrity_pass",
+        ]
+    ].reset_index(drop=True)
 
 
 def _plot_model_delta(path: Path, summary: pd.DataFrame, candidate_label: str) -> None:

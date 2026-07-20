@@ -1,0 +1,4 @@
+market,reference_rows,candidate_rows,integrity_pass,checked_columns
+bist100,49,49,True,"fold,forecast_origin,target_date,horizon_step"
+sp500,49,49,True,"fold,forecast_origin,target_date,horizon_step"
+wig20,37,37,True,"fold,forecast_origin,target_date,horizon_step"

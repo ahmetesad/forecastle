@@ -1,6 +1,6 @@
 # Forecastle Project Status
 
-Last updated: 2026-07-15
+Last updated: 2026-07-17
 
 ## Summary
 
@@ -111,6 +111,30 @@ The curated plans, integrity evidence, manifests, summaries, fold/horizon tables
 records, and plots are under
 [`results/experiments/markets_matched_origins_recursive_h20/`](results/experiments/markets_matched_origins_recursive_h20/).
 
+### Direct versus recursive horizon-20 comparison
+
+The matched direct study completed all 180 runs and compares only direct `t+20` predictions with
+recursive `horizon_step=20`. Direct forecasting is not uniformly superior. It substantially
+stabilizes BIST100 Close-only linear regression and modestly improves several DNFS configurations,
+but worsens BIST100 CNN1D/MLP and many other model-condition pairs. Persistence remains strongest
+on WIG20 and BIST100. S&P 500 indicator CNN1D remains the strongest learned result.
+
+Curated batch evidence and paired reports are under
+[`results/experiments/markets_matched_origins_direct_h20/`](results/experiments/markets_matched_origins_direct_h20/)
+and [`results/comparisons/direct_vs_recursive_h20/`](results/comparisons/direct_vs_recursive_h20/).
+
+### Rolling versus expanding comparison
+
+The rolling recursive study completed 175 of 180 runs. The five failures are deterministic
+BIST100 indicator linear-regression divergences. Rolling windows are not consistently better:
+WIG20 generally favors expanding history, S&P 500 differences are small, and BIST100 rolling
+windows help DNFS/LSTM-GRU while hurting CNN1D/MLP. Expanding evaluation remains the safer default.
+
+Curated batch evidence and paired reports are under
+[`results/experiments/markets_matched_origins_rolling_recursive_h20/`](results/experiments/markets_matched_origins_rolling_recursive_h20/)
+and
+[`results/comparisons/rolling_vs_expanding_recursive_h20/`](results/comparisons/rolling_vs_expanding_recursive_h20/).
+
 ## Research artifact policy
 
 `outputs/`, checkpoints, Optuna databases, and temporary runs remain ignored. The three datasets
@@ -131,8 +155,8 @@ or easily regenerated artifacts.
 - Hybrid-specific Optuna search spaces are not implemented.
 - Walk-forward training is sequential and can be slow across many models and folds.
 - Committed market snapshots are static and must be refreshed deliberately when extending the study.
-- Indicator effects are controlled within recursive forecasting, but direct-versus-recursive and
-  rolling-versus-expanding comparisons remain outstanding.
+- Direct-versus-recursive and rolling-versus-expanding comparisons are complete for the selected
+  three-market, six-model, two-feature, five-seed matrix.
 - Earlier exploratory ablation and seed runs preceded the model-order randomness fix and are not
   treated as canonical results.
 - The S&P 500 indicator-CNN1D gain is stable across seeds and horizons but partly concentrated in
@@ -141,13 +165,11 @@ or easily regenerated artifacts.
 
 ## Remaining work
 
-1. Compare direct horizon-20 forecasting against recursive step 20 on matched origins.
-2. Run rolling-window evaluation and compare rankings with expanding windows.
-3. Add confidence intervals or formal statistical tests across folds and seeds.
-4. Investigate the deterministic BIST100 indicator linear-regression divergence without hiding it
+1. Add confidence intervals or formal statistical tests across folds and seeds.
+2. Investigate the deterministic BIST100 indicator linear-regression divergence without hiding it
    through clipping or fallback predictions.
-5. Test whether market-specific tuning changes the cross-market conclusions.
-6. Consider parallel fold/trial execution after reproducibility guarantees are preserved.
+3. Test whether market-specific tuning changes the cross-market conclusions.
+4. Consider parallel fold/trial execution after reproducibility guarantees are preserved.
 
 ## Useful commands
 
