@@ -170,6 +170,21 @@ def generate_walk_forward_folds(
     initial_train_size = _slice_length(train_slice)
     validation_size = evaluation_config.validation_size or _slice_length(val_slice)
     rolling_train_size = evaluation_config.train_window_size or initial_train_size
+    if (
+        evaluation_config.window == "rolling"
+        and evaluation_config.train_window_size is None
+        and matched_origin_indices
+    ):
+        first_eligible_count = int(
+            np.count_nonzero(samples.target_indices <= matched_origin_indices[0])
+        )
+        rolling_train_size = min(
+            initial_train_size,
+            first_eligible_count - validation_size,
+        )
+        if rolling_train_size < 1:
+            msg = "The first matched origin has no training samples before validation."
+            raise ValueError(msg)
     first_test_index = _slice_start(test_slice)
     origin_index = int(samples.origin_indices[first_test_index])
     step_size = evaluation_config.step_size or dataset_config.horizon

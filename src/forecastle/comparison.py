@@ -12,6 +12,7 @@ from forecastle.evaluation.matched import PLAN_KEY, select_forecast_schedule
 from forecastle.plotting import plt
 
 ComparisonKind = Literal["direct_vs_recursive", "rolling_vs_expanding"]
+ForecastStrategy = Literal["direct", "recursive"]
 IDENTITY = ["market", "model", "feature_set", "seed"]
 METRICS = ["price_rmse", "price_mae", "rmse", "mae"]
 PRICE_METRIC_TOLERANCE = 1e-8
@@ -27,6 +28,7 @@ def run_comparison(config_path: Path) -> Path:
     comparison = _require_mapping(raw.get("comparison"), "comparison")
     name = str(comparison["name"])
     kind = _comparison_kind(comparison.get("kind"))
+    forecast_strategy = _forecast_strategy(comparison.get("forecast_strategy"), kind)
     horizon_step = int(comparison.get("horizon_step", 20))
     reference = _require_mapping(comparison.get("reference"), "comparison.reference")
     candidate = _require_mapping(comparison.get("candidate"), "comparison.candidate")
@@ -45,7 +47,7 @@ def run_comparison(config_path: Path) -> Path:
     schedule_integrity = _schedule_integrity(
         reference_dir,
         candidate_dir,
-        kind,
+        forecast_strategy,
         horizon_step,
     )
     write_dataframe(output_dir / "schedule_integrity.csv", schedule_integrity)
@@ -107,6 +109,7 @@ def run_comparison(config_path: Path) -> Path:
         {
             "name": name,
             "kind": kind,
+            "forecast_strategy": forecast_strategy,
             "horizon_step": horizon_step,
             "reference_label": reference_label,
             "reference_batch_dir": str(reference_dir),
@@ -254,7 +257,7 @@ def _coverage(
 def _schedule_integrity(
     reference_dir: Path,
     candidate_dir: Path,
-    kind: ComparisonKind,
+    forecast_strategy: ForecastStrategy,
     horizon_step: int,
 ) -> pd.DataFrame:
     markets = sorted(
@@ -266,15 +269,14 @@ def _schedule_integrity(
         reference = _read_required(reference_dir / "matched_origins" / f"{market}_plan.csv")
         candidate_path = candidate_dir / "matched_origins" / f"{market}_plan.csv"
         candidate = _read_required(candidate_path)
-        reference_strategy = "direct" if kind == "direct_vs_recursive" else "recursive"
         reference_schedule = select_forecast_schedule(
             reference,
-            reference_strategy,
+            forecast_strategy,
             horizon_step,
         )
         candidate_schedule = select_forecast_schedule(
             candidate,
-            "direct" if kind == "direct_vs_recursive" else "recursive",
+            forecast_strategy,
             horizon_step,
         )
         integrity_pass = reference_schedule.equals(candidate_schedule)
@@ -400,6 +402,15 @@ def _require_columns(frame: pd.DataFrame, columns: list[str], context: str) -> N
 def _comparison_kind(value: Any) -> ComparisonKind:
     if value not in {"direct_vs_recursive", "rolling_vs_expanding"}:
         msg = "comparison.kind must be direct_vs_recursive or rolling_vs_expanding."
+        raise ValueError(msg)
+    return value
+
+
+def _forecast_strategy(value: Any, kind: ComparisonKind) -> ForecastStrategy:
+    if value is None:
+        return "direct" if kind == "direct_vs_recursive" else "recursive"
+    if value not in {"direct", "recursive"}:
+        msg = "comparison.forecast_strategy must be direct or recursive."
         raise ValueError(msg)
     return value
 

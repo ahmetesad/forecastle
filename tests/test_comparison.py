@@ -76,6 +76,27 @@ def test_rolling_comparison_writes_fold_and_horizon_reports(tmp_path) -> None:
     assert sorted(horizons["horizon_step"].unique()) == [1, 20]
 
 
+def test_rolling_direct_comparison_uses_endpoint_schedule(tmp_path) -> None:
+    reference = tmp_path / "reference"
+    candidate = tmp_path / "candidate"
+    _write_batch(reference, recursive=False)
+    _write_batch(candidate, recursive=False)
+    config_path = _write_config(
+        tmp_path,
+        "rolling_vs_expanding",
+        reference,
+        candidate,
+        forecast_strategy="direct",
+    )
+
+    output_dir = run_comparison(config_path)
+
+    integrity = pd.read_csv(output_dir / "schedule_integrity.csv")
+    horizons = pd.read_csv(output_dir / "horizon_comparison.csv")
+    assert integrity["integrity_pass"].astype(bool).all()
+    assert horizons["horizon_step"].unique().tolist() == [20]
+
+
 def _write_batch(
     root: Path,
     *,
@@ -146,26 +167,28 @@ def _write_config(
     kind: str,
     reference: Path,
     candidate: Path,
+    forecast_strategy: str | None = None,
 ) -> Path:
+    comparison = {
+        "name": kind,
+        "kind": kind,
+        "horizon_step": 20,
+        "output_dir": str(tmp_path / "comparisons"),
+        "reference": {
+            "label": "reference",
+            "batch_dir": str(reference),
+        },
+        "candidate": {
+            "label": "candidate",
+            "batch_dir": str(candidate),
+        },
+    }
+    if forecast_strategy is not None:
+        comparison["forecast_strategy"] = forecast_strategy
     path = tmp_path / f"{kind}.yaml"
     path.write_text(
         yaml.safe_dump(
-            {
-                "comparison": {
-                    "name": kind,
-                    "kind": kind,
-                    "horizon_step": 20,
-                    "output_dir": str(tmp_path / "comparisons"),
-                    "reference": {
-                        "label": "reference",
-                        "batch_dir": str(reference),
-                    },
-                    "candidate": {
-                        "label": "candidate",
-                        "batch_dir": str(candidate),
-                    },
-                }
-            },
+            {"comparison": comparison},
             sort_keys=False,
         ),
         encoding="utf-8",

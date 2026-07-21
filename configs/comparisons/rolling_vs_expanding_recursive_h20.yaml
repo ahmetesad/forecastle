@@ -1,6 +1,7 @@
 comparison:
   name: rolling_vs_expanding_recursive_h20
   kind: rolling_vs_expanding
+  forecast_strategy: recursive
   horizon_step: 20
   output_dir: outputs/comparisons
 

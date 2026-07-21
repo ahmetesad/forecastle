@@ -474,6 +474,8 @@ expanding study:
   canonical recursive forecasts at `horizon_step=20`.
 - `markets_matched_origins_rolling_recursive_h20` compares a rolling training window with the
   canonical expanding window while retaining recursive steps 1 through 20.
+- `markets_matched_origins_rolling_direct_h20` completes the design by comparing rolling and
+  expanding training windows for direct endpoint forecasts at `t+20`.
 
 Each batch contains the same 180 market/model/feature/seed combinations as the canonical study.
 The source plans contribute forecast origins, target dates, and horizons only. Forecastle derives
@@ -490,6 +492,10 @@ uv run forecastle batch \
 uv run forecastle batch \
   --config configs/batches/markets_matched_origins_rolling_recursive_h20.yaml \
   --dry-run
+
+uv run forecastle batch \
+  --config configs/batches/markets_matched_origins_rolling_direct_h20.yaml \
+  --dry-run
 ```
 
 Run or resume them:
@@ -500,6 +506,9 @@ uv run forecastle batch \
 
 uv run forecastle batch \
   --config configs/batches/markets_matched_origins_rolling_recursive_h20.yaml
+
+uv run forecastle batch \
+  --config configs/batches/markets_matched_origins_rolling_direct_h20.yaml
 ```
 
 After a batch completes, generate paired reports:
@@ -510,6 +519,9 @@ uv run forecastle compare \
 
 uv run forecastle compare \
   --config configs/comparisons/rolling_vs_expanding_recursive_h20.yaml
+
+uv run forecastle compare \
+  --config configs/comparisons/rolling_vs_expanding_direct_h20.yaml
 ```
 
 The direct comparison pairs only direct `t+20` with recursive `horizon_step=20`; it never implies
@@ -517,6 +529,10 @@ that direct forecasts exist for steps 1 through 19. The rolling comparison also 
 per-fold and per-horizon summaries. Both comparison commands verify dated schedules and persistence
 controls before writing RMSE/MAE deltas, seed win counts, coverage tables, Markdown summaries, and
 plots under `outputs/comparisons/`. Return MAPE is not used for ranking.
+
+Together, expanding-recursive, rolling-recursive, expanding-direct, and rolling-direct form a
+complete `2 x 2` forecasting-strategy/window design. The direct rolling batch reuses the exact 37
+WIG20 and 49 S&P 500/BIST100 endpoint origins from the expanding direct study.
 
 The completed follow-up studies are curated under
 [`results/experiments/markets_matched_origins_direct_h20/`](results/experiments/markets_matched_origins_direct_h20/),

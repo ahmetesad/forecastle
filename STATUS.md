@@ -157,6 +157,8 @@ or easily regenerated artifacts.
 - Committed market snapshots are static and must be refreshed deliberately when extending the study.
 - Direct-versus-recursive and rolling-versus-expanding comparisons are complete for the selected
   three-market, six-model, two-feature, five-seed matrix.
+- The rolling-direct configuration is prepared but has not yet been executed, so the full
+  forecasting-strategy/window interaction is not yet estimated.
 - Earlier exploratory ablation and seed runs preceded the model-order randomness fix and are not
   treated as canonical results.
 - The S&P 500 indicator-CNN1D gain is stable across seeds and horizons but partly concentrated in
@@ -165,11 +167,12 @@ or easily regenerated artifacts.
 
 ## Remaining work
 
-1. Add confidence intervals or formal statistical tests across folds and seeds.
-2. Investigate the deterministic BIST100 indicator linear-regression divergence without hiding it
+1. Run the prepared rolling-direct batch and complete the `2 x 2` strategy/window comparison.
+2. Add confidence intervals or formal statistical tests across folds and seeds.
+3. Investigate the deterministic BIST100 indicator linear-regression divergence without hiding it
    through clipping or fallback predictions.
-3. Test whether market-specific tuning changes the cross-market conclusions.
-4. Consider parallel fold/trial execution after reproducibility guarantees are preserved.
+4. Test whether market-specific tuning changes the cross-market conclusions.
+5. Consider parallel fold/trial execution after reproducibility guarantees are preserved.
 
 ## Useful commands
 

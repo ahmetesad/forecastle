@@ -343,6 +343,24 @@ def test_direct_and_rolling_batches_reuse_canonical_forecast_schedule(tmp_path) 
         expected_direct,
     )
 
+    rolling_direct_config = _write_single_run_batch(
+        tmp_path,
+        matched=True,
+        include_indicators=True,
+        name="rolling_direct",
+        strategy="direct",
+        window="rolling",
+        max_folds=3,
+        origin_schedule_source=direct_dir / "matched_origins/synthetic_plan.csv",
+    )
+    rolling_direct_dir = run_batch(rolling_direct_config, dry_run=True)
+    rolling_direct_plan = pd.read_csv(rolling_direct_dir / "matched_origins/synthetic_plan.csv")
+    pd.testing.assert_frame_equal(
+        rolling_direct_plan[["fold", "forecast_origin", "target_date", "horizon_step"]],
+        expected_direct,
+    )
+    assert rolling_direct_plan.groupby("fold")["train_samples"].first().nunique() == 1
+
     rolling_config = _write_single_run_batch(
         tmp_path,
         matched=True,
