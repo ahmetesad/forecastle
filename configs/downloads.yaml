@@ -8,3 +8,24 @@ datasets:
   sp500:
     symbol: ^GSPC
     output: data/raw/sp500.csv
+  sp500_g7:
+    symbol: ^GSPC
+    output: data/raw/sp500_g7_2006_2026.csv
+  tsx:
+    symbol: ^GSPTSE
+    output: data/raw/tsx.csv
+  cac40:
+    symbol: ^FCHI
+    output: data/raw/cac40.csv
+  dax:
+    symbol: ^GDAXI
+    output: data/raw/dax.csv
+  ftse_mib:
+    symbol: FTSEMIB.MI
+    output: data/raw/ftse_mib.csv
+  nikkei225:
+    symbol: ^N225
+    output: data/raw/nikkei225.csv
+  ftse100:
+    symbol: ^FTSE
+    output: data/raw/ftse100.csv

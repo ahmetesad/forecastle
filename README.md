@@ -52,6 +52,12 @@ The preset symbols are:
 - WIG20: `WIG20.WA`
 - BIST100: `XU100.IS`
 - S&P 500: `^GSPC`
+- S&P/TSX Composite: `^GSPTSE`
+- CAC 40: `^FCHI`
+- DAX Performance Index: `^GDAXI`
+- FTSE MIB: `FTSEMIB.MI`
+- Nikkei 225: `^N225`
+- FTSE 100: `^FTSE`
 
 Downloaded CSVs contain the columns expected by the example dataset configs:
 `Date`, `Open`, `High`, `Low`, `Close`, optional `Adj Close`, and `Volume`.
@@ -68,6 +74,17 @@ including them makes it easier for everyone to run the same experiments against 
 | WIG20 | `data/raw/wig20.csv` | Stooq daily CSV | 2006-07-07 to 2026-07-06 | 4,999 | `2068449fa9044aae9b8dd670428feb5e3e2fb7c35207f8d46027f83ee2cf5ce4` |
 | S&P 500 | `data/raw/sp500.csv` | Yahoo Finance (`^GSPC`) | 2000-01-03 to 2026-07-08 | 6,667 | `973bb1b4c920de56183ef6404fdce8fa6bb7a5141263797a39139bcbfcd290c2` |
 | BIST100 | `data/raw/bist100.csv` | Yahoo Finance (`XU100.IS`) | 2000-01-04 to 2026-07-08 | 6,631 | `73bebf639bf279a1d795e70709709369f3cb6951b64b976067c12a77b76d2aa9` |
+| S&P/TSX Composite | `data/raw/tsx.csv` | Yahoo Finance (`^GSPTSE`) | 2006-01-04 to 2026-07-22 | 5,159 | `fadb5125873db514ca4ae863b3f7a0e4ead14d7b1777df7cb1288a110c43647c` |
+| CAC 40 | `data/raw/cac40.csv` | Yahoo Finance (`^FCHI`) | 2006-01-04 to 2026-07-22 | 5,252 | `2d544f7aa0e744843883bc156cd34d53973ad6954c4684275fb3b1af28538e13` |
+| DAX Performance Index | `data/raw/dax.csv` | Yahoo Finance (`^GDAXI`) | 2006-01-04 to 2026-07-22 | 5,213 | `6df3c07461b6001bea2f957118e4c2a0f60fc02ed6717da5035f5d9186d63fcd` |
+| FTSE MIB | `data/raw/ftse_mib.csv` | Yahoo Finance (`FTSEMIB.MI`) | 2006-01-04 to 2026-07-22 | 5,214 | `881af63714794a1e1e67aa16c3bfc7a80e9f81cdf2a5890a030ce3024b186663` |
+| Nikkei 225 | `data/raw/nikkei225.csv` | Yahoo Finance (`^N225`) | 2006-01-04 to 2026-07-22 | 5,027 | `15d5a0e48b2f419b676f1665849e2915787bf2347e13cd82ae11c0efeb5c4413` |
+| FTSE 100 | `data/raw/ftse100.csv` | Yahoo Finance (`^FTSE`) | 2006-01-04 to 2026-07-22 | 5,190 | `91e3912a3b8dbd79e5660a2370428a9616b1e5cfd945edda78c77f318b3f5c04` |
+| S&P 500, G7 interval | `data/raw/sp500_g7_2006_2026.csv` | Yahoo Finance (`^GSPC`) | 2006-01-04 to 2026-07-22 | 5,168 | `10f4c55ac164d62e8c2baf113d41cb486f99bf0f14bbc0d3d69b8dbb0f83e958` |
+
+The seven G7 study snapshots use identical calendar bounds while retaining each exchange's native
+trading sessions. The DAX file is Yahoo's performance-index series and therefore incorporates
+distributions.
 
 Running a downloader command can
 replace a snapshot with newer or provider-adjusted data and therefore change experiment results.
@@ -85,7 +102,7 @@ data/raw/             Committed research snapshots
 
 ## Adding a dataset
 
-1. Download or put a CSV in `data/raw/`; the three built-in datasets are already included.
+1. Download or put a CSV in `data/raw/`; the committed research datasets are already included.
 2. Add a dataset YAML file under `configs/datasets/`.
 3. Reference that dataset from an experiment YAML.
 

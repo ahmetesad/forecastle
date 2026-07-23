@@ -10,6 +10,13 @@ data/raw/*
 !data/raw/wig20.csv
 !data/raw/sp500.csv
 !data/raw/bist100.csv
+!data/raw/tsx.csv
+!data/raw/cac40.csv
+!data/raw/dax.csv
+!data/raw/ftse_mib.csv
+!data/raw/nikkei225.csv
+!data/raw/ftse100.csv
+!data/raw/sp500_g7_2006_2026.csv
 data/processed/
 *.db
 *.sqlite

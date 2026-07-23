@@ -1,0 +1,101 @@
+base_config: configs/evaluation/g7_walk_forward_h20_base.yaml
+
+batch:
+  name: g7_stage1_expanding_recursive_neural
+  output_dir: outputs/batches/g7_staged_2006_2026
+  matched_origins: true
+  fail_fast: false
+  study_metadata:
+    family: g7_staged_2006_2026
+    stage: "1"
+    scope: seven_g7_markets
+    calendar_start: 2006-01-04
+    calendar_end: 2026-07-22
+    us_dataset: data/raw/sp500_g7_2006_2026.csv
+    dax_note: ^GDAXI is the DAX Performance Index and incorporates distributions.
+
+  origin_schedule_sources:
+    canada_tsx: outputs/batches/g7_staged_2006_2026/g7_canonical_origins_recursive_h20/matched_origins/canada_tsx_plan.csv
+    france_cac40: outputs/batches/g7_staged_2006_2026/g7_canonical_origins_recursive_h20/matched_origins/france_cac40_plan.csv
+    germany_dax: outputs/batches/g7_staged_2006_2026/g7_canonical_origins_recursive_h20/matched_origins/germany_dax_plan.csv
+    italy_ftse_mib: outputs/batches/g7_staged_2006_2026/g7_canonical_origins_recursive_h20/matched_origins/italy_ftse_mib_plan.csv
+    japan_nikkei225: outputs/batches/g7_staged_2006_2026/g7_canonical_origins_recursive_h20/matched_origins/japan_nikkei225_plan.csv
+    uk_ftse100: outputs/batches/g7_staged_2006_2026/g7_canonical_origins_recursive_h20/matched_origins/uk_ftse100_plan.csv
+    us_sp500: outputs/batches/g7_staged_2006_2026/g7_canonical_origins_recursive_h20/matched_origins/us_sp500_plan.csv
+
+  datasets:
+    - name: canada_tsx
+      source: csv
+      csv_path: data/raw/tsx.csv
+      date_column: Date
+      target_column: Close
+    - name: france_cac40
+      source: csv
+      csv_path: data/raw/cac40.csv
+      date_column: Date
+      target_column: Close
+    - name: germany_dax
+      source: csv
+      csv_path: data/raw/dax.csv
+      date_column: Date
+      target_column: Close
+      source_symbol: ^GDAXI
+      index_variant: performance_index
+    - name: italy_ftse_mib
+      source: csv
+      csv_path: data/raw/ftse_mib.csv
+      date_column: Date
+      target_column: Close
+    - name: japan_nikkei225
+      source: csv
+      csv_path: data/raw/nikkei225.csv
+      date_column: Date
+      target_column: Close
+    - name: uk_ftse100
+      source: csv
+      csv_path: data/raw/ftse100.csv
+      date_column: Date
+      target_column: Close
+    - name: us_sp500
+      source: csv
+      csv_path: data/raw/sp500_g7_2006_2026.csv
+      date_column: Date
+      target_column: Close
+
+  models: [cnn1d, lstm_gru, dnfs]
+
+  model_params:
+    dnfs:
+      encoder_type: gru
+      consequent_type: first_order
+      num_rules: 8
+      usage_regularization: 0.001
+      rule_initialization: kmeans
+
+  feature_sets:
+    close:
+      feature_columns: [Close]
+      technical_indicators: null
+    indicators:
+      feature_columns: [Close]
+      technical_indicators:
+        sma_periods: [5, 10, 15, 20]
+        rsi_period: 14
+        macd:
+          fast_period: 12
+          slow_period: 26
+          signal_period: 9
+
+  seeds: [1, 42, 2026]
+  horizon: 20
+
+  forecasting:
+    strategy: recursive
+
+  evaluation:
+    strategy: walk_forward
+    window: expanding
+    step_size: null
+    validation_size: null
+    train_window_size: null
+    max_folds: null

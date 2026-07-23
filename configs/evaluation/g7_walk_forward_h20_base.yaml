@@ -1,0 +1,81 @@
+experiment:
+  name: g7_walk_forward_h20_base
+  output_dir: outputs
+  seed: 42
+  device: auto
+
+study_metadata:
+  family: g7_staged_2006_2026
+  physical_run_scope: seven_g7_markets
+  calendar_start: 2006-01-04
+  calendar_end: 2026-07-22
+  source: yfinance
+  symbols:
+    canada_tsx: ^GSPTSE
+    france_cac40: ^FCHI
+    germany_dax: ^GDAXI
+    italy_ftse_mib: FTSEMIB.MI
+    japan_nikkei225: ^N225
+    uk_ftse100: ^FTSE
+    us_sp500: ^GSPC
+  us_dataset: data/raw/sp500_g7_2006_2026.csv
+  dax_note: ^GDAXI is the DAX Performance Index and incorporates distributions.
+
+dataset:
+  name: sp500_g7_reference
+  source: csv
+  csv_path: data/raw/sp500_g7_2006_2026.csv
+  date_column: Date
+  target_column: Close
+  target_transform: log_return
+  feature_columns:
+    - Close
+  sequence_length: 30
+  horizon: 20
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  scale_features: true
+  scale_target: true
+  dropna: true
+
+forecasting:
+  strategy: recursive
+
+evaluation:
+  strategy: walk_forward
+  window: expanding
+  step_size: null
+  validation_size: null
+  train_window_size: null
+  max_folds: null
+
+training:
+  batch_size: 64
+  epochs: 50
+  learning_rate: 0.001
+  weight_decay: 0.0
+  patience: 8
+  num_workers: 0
+  models:
+    - name: mlp
+      params:
+        hidden_sizes: [128, 64]
+        dropout: 0.1
+    - name: cnn1d
+      params:
+        channels: [32, 64]
+        kernel_size: 3
+        dropout: 0.1
+    - name: dnfs
+      params:
+        encoder_type: gru
+        consequent_type: first_order
+        num_rules: 8
+        usage_regularization: 0.001
+        rule_initialization: kmeans
+    - name: lstm_gru
+      params:
+        lstm_hidden_size: 64
+        gru_hidden_size: 64
+        dropout: 0.1
