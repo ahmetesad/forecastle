@@ -1,10 +1,14 @@
 # Forecastle Project Status
 
-Last updated: 2026-07-17
+Last updated: 2026-07-23
 
 ## Summary
 
-Current experimental evidence on WIG20 indicates that naive persistence remains the strongest overall baseline under the canonical protocol, although several neural architectures approach its performance. Remaining work focuses on additional datasets, multi-seed validation, and statistical analysis rather than major framework development.
+Forecastle is now a reproducible multi-market research framework rather than a single WIG20
+benchmark. The canonical three-market evidence is strongly market-dependent: persistence remains
+best on WIG20 and BIST100, while indicator CNN1D is the strongest repeatable learned result on the
+S&P 500. Direct forecasting and rolling windows are useful robustness checks, but neither is
+uniformly better than recursive forecasting with expanding history.
 
 ## Current implementation
 
@@ -20,9 +24,15 @@ The repository currently has:
 - Aggregate, per-fold, and per-horizon metrics, long-form predictions, plots, and checkpoints.
 - YAML experiment definitions, parameter sweeps, and resumable Optuna tuning.
 - Stable-ID, resumable batch experiments with cross-run summaries and plots.
+- Persistent benchmark workers for dynamically scheduling independent studies across physical
+  CUDA devices; each individual model run still uses one device.
+- Matched-origin plans and integrity checks that align Close-only and indicator conditions and
+  validate persistence controls.
 - Temporal DNFS encoders, Gaussian fuzzy rules, configurable TSK consequents, training-only
   K-means initialization, rule diagnostics, usage regularization, top-k gating, and optional pruning.
-- Yahoo Finance downloads for WIG20, BIST100, and S&P 500 presets.
+- Yahoo Finance presets and committed snapshots for the six new G7 indices plus a versioned,
+  common-interval S&P 500 file. Existing WIG20, BIST100, and legacy S&P 500 snapshots remain
+  available for prior-study reproduction.
 
 Existing holdout configurations keep their original behavior. Walk-forward evaluation, recursive forecasting, and technical indicators are enabled only when their configuration sections request them. Recursive forecasting intentionally accepts only Close and Close-derived indicators because future OHLCV or exogenous observations are unavailable at inference time.
 
@@ -135,11 +145,36 @@ Curated batch evidence and paired reports are under
 and
 [`results/comparisons/rolling_vs_expanding_recursive_h20/`](results/comparisons/rolling_vs_expanding_recursive_h20/).
 
+### Rolling-direct completion
+
+The rolling-direct batch completed all 180 planned three-market runs and closes the `2 x 2`
+forecasting-strategy/window design. Its conclusions remain market- and model-specific. Expanding
+direct is clearly safer on WIG20: rolling increases price RMSE by roughly 5-21% for most learned
+models and linear regression. S&P 500 window effects are mostly small, although rolling worsens
+indicator CNN1D by 4.27%. On BIST100, rolling improves indicator LSTM-GRU by 3.51% but substantially
+hurts CNN1D, MLP, and Close-only linear regression.
+
+## G7 benchmark design
+
+The G7 protocol covers Canada, France, Germany, Italy, Japan, the United Kingdom, and the United
+States from 2006-01-04 through 2026-07-22. Each market keeps its native trading sessions; national
+calendars are not joined or forward-filled. The design spans expanding and rolling windows, direct
+and recursive forecasting, Close-only and indicator features, deterministic baselines, neural
+architectures, and repeated seeds.
+
+The exact CSV snapshots, SHA-256 hashes, downloader presets, and benchmark configurations are
+versioned with the project. Close-only and indicator conditions share a 33-row warm-up and
+identical dated schedules within each market. Configuration validation resolves 1,232 unique
+physical run identities without duplicate deterministic baselines. The DAX source is Yahoo's
+`^GDAXI` performance index, which incorporates distributions and must be considered when
+interpreting cross-market comparisons.
+
 ## Research artifact policy
 
-`outputs/`, checkpoints, Optuna databases, and temporary runs remain ignored. The three datasets
-used by tracked experiments are committed as fixed research snapshots to simplify collaboration;
-additional raw downloads remain ignored. The repository otherwise keeps selected final and
+`outputs/`, checkpoints, Optuna databases, and temporary runs remain ignored. Ten datasets used by
+tracked or configured experiments are committed as fixed research snapshots to simplify
+collaboration, including seven identically bounded G7-study files; additional raw downloads remain
+ignored. The repository otherwise keeps selected final and
 historically important exploratory tables, key plots, exact experiment configs, concise analyses,
 checksums, manifests, and representative prediction files. Exploratory artifacts are labeled with
 their methodological limitations. This makes the research trail inspectable while avoiding large
@@ -153,31 +188,23 @@ or easily regenerated artifacts.
 - Recursive forecasting supports only Close and generated Close-derived indicators.
 - Direct forecasting predicts one endpoint at `t+h`; it is not a multi-output sequence decoder.
 - Hybrid-specific Optuna search spaces are not implemented.
-- Walk-forward training is sequential and can be slow across many models and folds.
+- Folds within one benchmark run remain sequential. Independent batch studies can be scheduled
+  concurrently across multiple GPUs, with one active neural training process per device.
 - Committed market snapshots are static and must be refreshed deliberately when extending the study.
 - Direct-versus-recursive and rolling-versus-expanding comparisons are complete for the selected
   three-market, six-model, two-feature, five-seed matrix.
-- The rolling-direct configuration is prepared but has not yet been executed, so the full
-  forecasting-strategy/window interaction is not yet estimated.
 - Earlier exploratory ablation and seed runs preceded the model-order randomness fix and are not
   treated as canonical results.
 - The S&P 500 indicator-CNN1D gain is stable across seeds and horizons but partly concentrated in
   favorable folds.
 - BIST100 linear regression with indicators is numerically unstable under recursive forecasting.
-
-## Remaining work
-
-1. Run the prepared rolling-direct batch and complete the `2 x 2` strategy/window comparison.
-2. Add confidence intervals or formal statistical tests across folds and seeds.
-3. Investigate the deterministic BIST100 indicator linear-regression divergence without hiding it
-   through clipping or fallback predictions.
-4. Test whether market-specific tuning changes the cross-market conclusions.
-5. Consider parallel fold/trial execution after reproducibility guarantees are preserved.
+- The G7 DAX snapshot is the `^GDAXI` performance index, while the other datasets do not all share
+  that total-return treatment.
 
 ## Useful commands
 
 ```bash
-uv sync --dev # installing dependencies (if you have uv installed)
+uv sync --frozen --dev
 uv run forecastle run --config configs/evaluation/wig20_walk_forward_recursive.yaml
 uv run forecastle run --config configs/evaluation/wig20_rolling_recursive.yaml
 uv run forecastle run --config configs/evaluation/wig20_walk_forward_recursive_smoke.yaml
