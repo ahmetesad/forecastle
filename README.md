@@ -414,6 +414,41 @@ a quick orchestration check. Run IDs are deterministic and include every varied 
 for example
 `wig20__cnn1d__close__seed42`.
 
+### Concurrent benchmark queues
+
+Several independent batch studies can share multiple GPUs through persistent workers:
+
+```bash
+uv run forecastle batch \
+  --config configs/batches/markets_matched_origins_recursive_h20.yaml \
+           configs/batches/markets_matched_origins_direct_h20.yaml \
+           configs/batches/markets_matched_origins_rolling_recursive_h20.yaml \
+           configs/batches/markets_matched_origins_rolling_direct_h20.yaml \
+  --devices cuda:0,cuda:1
+```
+
+One worker is pinned to each listed physical GPU. Each worker trains one model at a time on its
+assigned GPU and pulls the next complete batch study from the shared queue when its current study
+finishes. CPU baselines remain CPU workloads inside the owning benchmark process.
+
+Preview the initial assignments and pending queue without running experiments:
+
+```bash
+uv run forecastle batch \
+  --config configs/batches/markets_matched_origins_recursive_h20.yaml \
+           configs/batches/markets_matched_origins_direct_h20.yaml \
+           configs/batches/markets_matched_origins_rolling_recursive_h20.yaml \
+  --devices cuda:0,cuda:1 \
+  --dry-run
+```
+
+Every batch configuration must resolve to a distinct `batch.output_dir/batch.name` directory.
+Benchmark-level advisory locks prevent two schedulers from claiming the same directory. Per-study
+worker state, logs, temporary files, run metadata, and normal resume artifacts stay under that
+batch directory. Queue schedules and state are written under the output root's `_queues/`
+directory. Re-running the same command retains ordinary artifact validation, successful-run
+skipping, failure records, matched-origin checks, and `--retry-failed` behavior.
+
 The stable output directory is
 `outputs/batches/markets_matched_origins_recursive_h20/`:
 

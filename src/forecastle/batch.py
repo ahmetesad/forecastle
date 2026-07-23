@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import os
 import platform
 import re
 import subprocess
@@ -60,6 +61,7 @@ def run_batch(
     *,
     dry_run: bool = False,
     retry_failed: bool = False,
+    device_override: str | None = None,
 ) -> Path:
     raw = _load_yaml(config_path)
     batch = _require_mapping(raw.get("batch"), "batch")
@@ -69,7 +71,12 @@ def run_batch(
 
     base_path = _resolve_path(config_path.parent, Path(raw["base_config"]))
     base_raw = _load_yaml(base_path)
-    runs = expand_batch_runs(base_raw, batch, batch_dir)
+    runs = expand_batch_runs(
+        base_raw,
+        batch,
+        batch_dir,
+        device_override=device_override,
+    )
     matched_origins = bool(batch.get("matched_origins", False))
     if matched_origins:
         _materialize_matched_origin_plans(runs, batch_dir, batch)
@@ -192,6 +199,8 @@ def expand_batch_runs(
     base_raw: dict[str, Any],
     batch: dict[str, Any],
     batch_dir: Path,
+    *,
+    device_override: str | None = None,
 ) -> list[BatchRun]:
     datasets = _require_list(batch.get("datasets"), "batch.datasets")
     feature_sets = _require_mapping(batch.get("feature_sets"), "batch.feature_sets")
@@ -243,6 +252,7 @@ def expand_batch_runs(
                         run_root,
                         aligned_warmup_rows=warmup_by_market.get(market),
                         matched_plan_path=plan_paths.get(market) if matched_origins else None,
+                        device_override=device_override,
                     )
                     config = parse_config(run_raw)
                     config_yaml = yaml.safe_dump(run_raw, sort_keys=False)
@@ -430,11 +440,14 @@ def _make_run_raw(
     run_root: Path,
     aligned_warmup_rows: int | None = None,
     matched_plan_path: Path | None = None,
+    device_override: str | None = None,
 ) -> dict[str, Any]:
     raw = copy.deepcopy(base_raw)
     raw.setdefault("experiment", {}).update(
         {"name": "artifacts", "output_dir": str(run_root), "seed": seed}
     )
+    if device_override is not None:
+        raw["experiment"]["device"] = device_override
     raw.setdefault("dataset", {}).update(dataset)
     raw["dataset"]["feature_columns"] = list(feature.get("feature_columns", ["Close"]))
     if "technical_indicators" in feature:
@@ -490,6 +503,8 @@ def _base_run_metadata(batch_run: BatchRun) -> dict[str, Any]:
         "forecastle_version": version("forecastle"),
         "torch_version": str(torch.__version__),
         "device_requested": batch_run.config.experiment.device,
+        "worker_device": os.environ.get("FORECASTLE_WORKER_DEVICE", ""),
+        "physical_gpu_id": os.environ.get("FORECASTLE_PHYSICAL_GPU_ID", ""),
         "divergence": False,
     }
     if batch_run.matched_plan_path is not None:

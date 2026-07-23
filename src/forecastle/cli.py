@@ -1,15 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
-from forecastle.batch import run_batch
-from forecastle.comparison import run_comparison
-from forecastle.config import load_config
-from forecastle.data.downloader import DownloadRequest, download_prices, download_prices_from_config
-from forecastle.experiment import run_experiment
-from forecastle.sweep import run_sweep
-from forecastle.tuning import run_tuning
+os.environ["MPLBACKEND"] = "Agg"
 
 
 def main() -> None:
@@ -25,8 +20,16 @@ def main() -> None:
     batch_parser.add_argument(
         "--config",
         required=True,
+        action="extend",
+        nargs="+",
         type=Path,
-        help="Path to batch YAML config.",
+        help="One or more batch YAML configs. Repeat the option or provide multiple paths.",
+    )
+    batch_parser.add_argument(
+        "--devices",
+        type=_device_list,
+        default=None,
+        help="Comma-separated worker devices, for example cuda:0,cuda:1.",
     )
     batch_parser.add_argument(
         "--limit",
@@ -37,7 +40,7 @@ def main() -> None:
     batch_parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Materialize plans and print the run matrix without training models.",
+        help="Print the batch matrix or worker schedule without training models.",
     )
     batch_parser.add_argument(
         "--retry-failed",
@@ -114,28 +117,60 @@ def main() -> None:
 
     args = parser.parse_args()
     if args.command == "run":
+        from forecastle.config import load_config
+        from forecastle.experiment import run_experiment
+
         config = load_config(args.config)
         result = run_experiment(config)
         print(f"Wrote experiment artifacts to {result.run_dir}")
     elif args.command == "batch":
-        batch_dir = run_batch(
-            args.config,
-            limit=args.limit,
-            dry_run=args.dry_run,
-            retry_failed=args.retry_failed,
-        )
-        print(f"Wrote batch artifacts to {batch_dir}")
+        if args.devices is not None or len(args.config) > 1:
+            if args.devices is None:
+                parser.error("--devices is required when multiple batch configs are provided.")
+            from forecastle.benchmark_queue import run_benchmark_queue
+
+            queue_dir = run_benchmark_queue(
+                args.config,
+                args.devices,
+                limit=args.limit,
+                dry_run=args.dry_run,
+                retry_failed=args.retry_failed,
+            )
+            print(f"Wrote benchmark queue artifacts to {queue_dir}")
+        else:
+            from forecastle.batch import run_batch
+
+            batch_dir = run_batch(
+                args.config[0],
+                limit=args.limit,
+                dry_run=args.dry_run,
+                retry_failed=args.retry_failed,
+            )
+            print(f"Wrote batch artifacts to {batch_dir}")
     elif args.command == "compare":
+        from forecastle.comparison import run_comparison
+
         comparison_dir = run_comparison(args.config)
         print(f"Wrote comparison artifacts to {comparison_dir}")
     elif args.command == "sweep":
+        from forecastle.sweep import run_sweep
+
         sweep_dir = run_sweep(args.config, limit=args.limit)
         print(f"Wrote sweep artifacts to {sweep_dir}")
     elif args.command == "tune":
+        from forecastle.config import load_config
+        from forecastle.tuning import run_tuning
+
         config = load_config(args.config)
         tune_dir = run_tuning(config)
         print(f"Wrote tuning artifacts to {tune_dir}")
     elif args.command == "download":
+        from forecastle.data.downloader import (
+            DownloadRequest,
+            download_prices,
+            download_prices_from_config,
+        )
+
         if args.symbol is not None:
             if args.output is None:
                 parser.error("--output is required when using --symbol.")
@@ -160,3 +195,10 @@ def main() -> None:
                 output_path=args.output,
             )
         print(f"Wrote downloaded prices to {output_path}")
+
+
+def _device_list(value: str) -> list[str]:
+    devices = [item.strip() for item in value.split(",") if item.strip()]
+    if not devices:
+        raise argparse.ArgumentTypeError("At least one device is required.")
+    return devices
