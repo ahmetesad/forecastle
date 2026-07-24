@@ -29,7 +29,7 @@ batch:
     - {name: japan_nikkei225, source: csv, csv_path: data/raw/nikkei225.csv, date_column: Date, target_column: Close}
     - {name: uk_ftse100, source: csv, csv_path: data/raw/ftse100.csv, date_column: Date, target_column: Close}
     - {name: us_sp500, source: csv, csv_path: data/raw/sp500_g7_2006_2026.csv, date_column: Date, target_column: Close}
-  models: [cnn1d, lstm_gru, dnfs, mlp]
+  models: [cnn1d, lstm, lstm_gru, dnfs, mlp]
   model_params:
     dnfs: {encoder_type: gru, consequent_type: first_order, num_rules: 8, usage_regularization: 0.001, rule_initialization: kmeans}
   feature_sets: &feature_sets
