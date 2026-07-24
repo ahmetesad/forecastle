@@ -25,24 +25,80 @@ SUMMARY_METRICS = [
 
 def write_batch_summaries(batch_dir: Path) -> None:
     manifest, results, horizons, folds = _collect_completed_results(batch_dir)
-    write_dataframe(batch_dir / "manifest.csv", manifest)
-    write_dataframe(batch_dir / "run_results.csv", results)
-    write_dataframe(batch_dir / "horizon_results.csv", horizons)
-    write_dataframe(batch_dir / "fold_results.csv", folds)
+    _write_summary_artifacts(batch_dir, manifest, results, horizons, folds)
+    if "matched_plan_path" in manifest and manifest["matched_plan_path"].fillna("").ne("").any():
+        write_matched_origin_integrity_report(batch_dir)
+
+
+def write_combined_batch_summaries(report_dir: Path, batch_dirs: list[Path]) -> None:
+    """Combine compatible batch slices into one scientifically valid report."""
+    if len(batch_dirs) < 2:
+        msg = "Combined reporting requires at least two batch directories."
+        raise ValueError(msg)
+    tables: dict[str, list[pd.DataFrame]] = {
+        "manifest": [],
+        "results": [],
+        "horizons": [],
+        "folds": [],
+    }
+    filenames = {
+        "manifest": "manifest.csv",
+        "results": "run_results.csv",
+        "horizons": "horizon_results.csv",
+        "folds": "fold_results.csv",
+    }
+    source_rows = []
+    for batch_dir in batch_dirs:
+        source_rows.append({"batch_name": batch_dir.name, "batch_dir": str(batch_dir)})
+        for table_name, filename in filenames.items():
+            path = batch_dir / filename
+            if not path.is_file():
+                msg = f"Combined report source is missing {path}."
+                raise FileNotFoundError(msg)
+            frame = pd.read_csv(path)
+            frame["source_batch"] = batch_dir.name
+            tables[table_name].append(frame)
+
+    combined = {
+        name: pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+        for name, frames in tables.items()
+    }
+    _validate_combined_run_identities(combined["manifest"])
+    report_dir.mkdir(parents=True, exist_ok=True)
+    write_dataframe(report_dir / "source_batches.csv", pd.DataFrame(source_rows))
+    _write_summary_artifacts(
+        report_dir,
+        combined["manifest"],
+        combined["results"],
+        combined["horizons"],
+        combined["folds"],
+    )
+
+
+def _write_summary_artifacts(
+    output_dir: Path,
+    manifest: pd.DataFrame,
+    results: pd.DataFrame,
+    horizons: pd.DataFrame,
+    folds: pd.DataFrame,
+) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    write_dataframe(output_dir / "manifest.csv", manifest)
+    write_dataframe(output_dir / "run_results.csv", results)
+    write_dataframe(output_dir / "horizon_results.csv", horizons)
+    write_dataframe(output_dir / "fold_results.csv", folds)
 
     completion = _completion_summary(manifest)
     divergence = _divergence_frequency(manifest)
-    write_dataframe(batch_dir / "completion_summary.csv", completion)
-    write_dataframe(batch_dir / "divergence_frequency.csv", divergence)
-    if "matched_plan_path" in manifest and manifest["matched_plan_path"].fillna("").ne("").any():
-        write_matched_origin_integrity_report(batch_dir)
+    write_dataframe(output_dir / "completion_summary.csv", completion)
+    write_dataframe(output_dir / "divergence_frequency.csv", divergence)
 
     if not results.empty:
         results = _add_persistence_comparisons(results)
     if not horizons.empty:
         horizons = _add_horizon_persistence_comparisons(horizons)
-    write_dataframe(batch_dir / "run_results.csv", results)
-    write_dataframe(batch_dir / "horizon_results.csv", horizons)
+    write_dataframe(output_dir / "run_results.csv", results)
+    write_dataframe(output_dir / "horizon_results.csv", horizons)
 
     aggregate = _aggregate_metrics(results, completion)
     rankings = _aggregate_rankings(results, completion)
@@ -51,18 +107,18 @@ def write_batch_summaries(batch_dir: Path) -> None:
     fold_summary = _aggregate_folds(folds)
     seed_stability = _seed_stability(results)
 
-    write_dataframe(batch_dir / "aggregate_metrics.csv", aggregate)
-    write_dataframe(batch_dir / "model_rankings.csv", rankings)
-    write_dataframe(batch_dir / "indicator_effects.csv", indicator_pairs)
-    write_dataframe(batch_dir / "indicator_effect_summary.csv", indicator_summary)
-    write_dataframe(batch_dir / "cross_market_comparison.csv", aggregate)
-    write_dataframe(batch_dir / "aggregate_horizon_metrics.csv", horizon_summary)
-    write_dataframe(batch_dir / "aggregate_fold_metrics.csv", fold_summary)
-    write_dataframe(batch_dir / "seed_stability.csv", seed_stability)
+    write_dataframe(output_dir / "aggregate_metrics.csv", aggregate)
+    write_dataframe(output_dir / "model_rankings.csv", rankings)
+    write_dataframe(output_dir / "indicator_effects.csv", indicator_pairs)
+    write_dataframe(output_dir / "indicator_effect_summary.csv", indicator_summary)
+    write_dataframe(output_dir / "cross_market_comparison.csv", aggregate)
+    write_dataframe(output_dir / "aggregate_horizon_metrics.csv", horizon_summary)
+    write_dataframe(output_dir / "aggregate_fold_metrics.csv", fold_summary)
+    write_dataframe(output_dir / "seed_stability.csv", seed_stability)
 
     if results.empty:
         return
-    plots_dir = batch_dir / "plots"
+    plots_dir = output_dir / "plots"
     _plot_model_rankings(plots_dir / "model_rankings.png", results)
     _plot_indicator_effects(plots_dir / "indicator_effects.png", indicator_pairs)
     _plot_cross_market(plots_dir / "cross_market_comparison.png", results)
@@ -175,9 +231,8 @@ def _durable_manifest(batch_dir: Path, metadata_rows: list[dict[str, object]]) -
 
 
 def _add_persistence_comparisons(frame: pd.DataFrame) -> pd.DataFrame:
-    keys = ["market", "feature_set", "seed"]
-    reference = frame[frame["model"] == "naive_persistence"][[*keys, "price_rmse", "rmse"]]
-    reference = reference.rename(
+    keys = ["market", "feature_set"]
+    reference = _persistence_reference(frame, keys, ["price_rmse", "rmse"]).rename(
         columns={"price_rmse": "persistence_price_rmse", "rmse": "persistence_rmse"}
     )
     enriched = frame.drop(
@@ -194,15 +249,18 @@ def _add_persistence_comparisons(frame: pd.DataFrame) -> pd.DataFrame:
         enriched["price_rmse"] / enriched["persistence_price_rmse"]
     )
     enriched["rmse_ratio_to_persistence"] = enriched["rmse"] / enriched["persistence_rmse"]
-    enriched["price_rmse_rank"] = enriched.groupby(keys)["price_rmse"].rank(method="min")
-    return enriched.sort_values([*keys, "price_rmse_rank", "model"]).reset_index(drop=True)
+    ranking_keys = [*keys, "seed"]
+    enriched["price_rmse_rank"] = np.nan
+    for _, group in enriched.groupby(ranking_keys, sort=False):
+        enriched.loc[group.index, "price_rmse_rank"] = _rank_with_persistence(group)
+    return enriched.sort_values([*ranking_keys, "price_rmse_rank", "model"]).reset_index(drop=True)
 
 
 def _add_horizon_persistence_comparisons(frame: pd.DataFrame) -> pd.DataFrame:
     if frame.empty:
         return frame
-    keys = ["market", "feature_set", "seed", "horizon_step"]
-    reference = frame[frame["model"] == "naive_persistence"][[*keys, "price_rmse"]].rename(
+    keys = ["market", "feature_set", "horizon_step"]
+    reference = _persistence_reference(frame, keys, ["price_rmse"]).rename(
         columns={"price_rmse": "persistence_price_rmse"}
     )
     enriched = frame.drop(
@@ -211,7 +269,45 @@ def _add_horizon_persistence_comparisons(frame: pd.DataFrame) -> pd.DataFrame:
     enriched["price_rmse_ratio_to_persistence"] = (
         enriched["price_rmse"] / enriched["persistence_price_rmse"]
     )
-    return enriched.sort_values([*keys, "model"]).reset_index(drop=True)
+    return enriched.sort_values([*keys, "seed", "model"]).reset_index(drop=True)
+
+
+def _persistence_reference(
+    frame: pd.DataFrame,
+    keys: list[str],
+    metrics: list[str],
+) -> pd.DataFrame:
+    reference = frame[frame["model"] == "naive_persistence"][[*keys, *metrics]]
+    if reference.empty:
+        return pd.DataFrame(columns=[*keys, *metrics])
+    conflicts = reference.groupby(keys, dropna=False)[metrics].nunique(dropna=False).gt(1)
+    if conflicts.any(axis=None):
+        conflict_keys = conflicts.any(axis=1)
+        values = [str(value) for value in conflict_keys[conflict_keys].index.tolist()]
+        joined_values = ", ".join(values)
+        msg = f"Persistence controls differ across deterministic duplicate runs: {joined_values}."
+        raise ValueError(msg)
+    return reference.groupby(keys, as_index=False, dropna=False)[metrics].first()
+
+
+def _rank_with_persistence(group: pd.DataFrame) -> np.ndarray:
+    values = group["price_rmse"].reset_index(drop=True)
+    if "naive_persistence" not in group["model"].astype(str).values:
+        persistence = group["persistence_price_rmse"].dropna()
+        if not persistence.empty:
+            values = pd.concat([values, pd.Series([persistence.iloc[0]])], ignore_index=True)
+    ranks = values.rank(method="min")
+    return ranks.iloc[: len(group)].to_numpy()
+
+
+def _validate_combined_run_identities(manifest: pd.DataFrame) -> None:
+    if manifest.empty or "run_id" not in manifest:
+        return
+    duplicates = manifest.loc[manifest["run_id"].duplicated(keep=False), "run_id"].astype(str)
+    if not duplicates.empty:
+        names = ", ".join(sorted(duplicates.unique())[:5])
+        msg = f"Combined report sources contain duplicate physical run identities: {names}."
+        raise ValueError(msg)
 
 
 def _aggregate_metrics(frame: pd.DataFrame, completion: pd.DataFrame) -> pd.DataFrame:

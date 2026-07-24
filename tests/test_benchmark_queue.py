@@ -121,12 +121,47 @@ def test_parallel_and_serial_neural_metrics_are_equivalent(tmp_path) -> None:
         assert metadata["worker_device"] == "cpu"
 
 
+def test_queue_combines_compatible_baseline_and_neural_reports(tmp_path) -> None:
+    baseline = _write_benchmark(
+        tmp_path,
+        "baseline_slice",
+        model="naive_persistence",
+        seeds=[42],
+    )
+    neural = _write_benchmark(
+        tmp_path,
+        "neural_slice",
+        model="mlp",
+        seeds=[1, 42],
+    )
+
+    queue_dir = run_benchmark_queue([baseline, neural], ["cpu", "cpu"])
+
+    status = _load_yaml(queue_dir / "combined_report_status.yaml")
+    assert status["status"] == "completed"
+    report_dir = queue_dir / "combined_report"
+    results = pd.read_csv(report_dir / "run_results.csv")
+    assert set(results["model"]) == {"naive_persistence", "mlp"}
+    neural_results = results[results["model"] == "mlp"]
+    assert neural_results["persistence_price_rmse"].notna().all()
+    assert neural_results["price_rmse_ratio_to_persistence"].notna().all()
+    assert neural_results["price_rmse_rank"].isin([1.0, 2.0]).all()
+
+    aggregate = pd.read_csv(report_dir / "aggregate_metrics.csv")
+    assert set(aggregate["model"]) == {"naive_persistence", "mlp"}
+    mlp = aggregate[aggregate["model"] == "mlp"].iloc[0]
+    assert mlp["seeds_completed"] == 2
+    assert 0 <= mlp["seeds_beating_persistence"] <= 2
+    assert (report_dir / "source_batches.csv").is_file()
+
+
 def _write_benchmark(
     tmp_path: Path,
     name: str,
     *,
     batch_name: str | None = None,
     model: str = "naive_persistence",
+    seeds: list[int] | None = None,
 ) -> Path:
     data_path = tmp_path / "prices.csv"
     if not data_path.exists():
@@ -203,7 +238,7 @@ def _write_benchmark(
                             "technical_indicators": None,
                         }
                     },
-                    "seeds": [7],
+                    "seeds": seeds or [7],
                     "horizon": 2,
                     "forecasting": {"strategy": "recursive"},
                     "evaluation": {

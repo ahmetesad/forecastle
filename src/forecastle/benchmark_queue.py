@@ -155,6 +155,7 @@ def run_benchmark_queue(
         names = ", ".join(str(state["benchmark_id"]) for state in failed)
         msg = f"{len(failed)} queued benchmark(s) did not complete: {names}. See {queue_dir}."
         raise BenchmarkQueueError(msg)
+    _write_combined_queue_report(queue_dir, specs)
     return queue_dir
 
 
@@ -411,6 +412,99 @@ def _write_state(queue_dir: Path, states: dict[str, dict[str, Any]]) -> None:
         queue_dir / "queue_state.yaml",
         {"updated_at": _now(), "benchmarks": rows},
     )
+
+
+def _write_combined_queue_report(queue_dir: Path, specs: list[BenchmarkSpec]) -> None:
+    status_path = queue_dir / "combined_report_status.yaml"
+    if len(specs) < 2:
+        _write_yaml(
+            status_path,
+            {"status": "not_applicable", "reason": "Only one benchmark was queued."},
+        )
+        return
+    signatures = {_reporting_signature(spec) for spec in specs}
+    if len(signatures) != 1:
+        _write_yaml(
+            status_path,
+            {
+                "status": "not_applicable",
+                "reason": "Queued benchmarks use different evaluation protocols.",
+            },
+        )
+        return
+    duplicate_run_ids = _duplicate_planned_run_ids(specs)
+    if duplicate_run_ids:
+        _write_yaml(
+            status_path,
+            {
+                "status": "not_applicable",
+                "reason": "Queued benchmarks contain duplicate physical run identities.",
+                "duplicate_run_ids": duplicate_run_ids[:20],
+            },
+        )
+        return
+
+    from forecastle.batch_analysis import write_combined_batch_summaries
+
+    report_dir = queue_dir / "combined_report"
+    try:
+        write_combined_batch_summaries(report_dir, [spec.batch_dir for spec in specs])
+    except Exception as error:
+        _write_yaml(
+            status_path,
+            {
+                "status": "failed",
+                "report_dir": str(report_dir),
+                "error": f"{type(error).__name__}: {error}",
+            },
+        )
+        msg = f"Queued benchmarks completed, but combined reporting failed: {error}"
+        raise BenchmarkQueueError(msg) from error
+    _write_yaml(
+        status_path,
+        {
+            "status": "completed",
+            "report_dir": str(report_dir),
+            "source_batches": [str(spec.batch_dir) for spec in specs],
+        },
+    )
+
+
+def _reporting_signature(spec: BenchmarkSpec) -> str:
+    raw = _load_yaml(spec.config_path)
+    batch = _require_mapping(raw.get("batch"), "batch")
+    base_value = Path(str(raw["base_config"]))
+    base_path = (
+        base_value.resolve()
+        if base_value.is_absolute() or base_value.exists()
+        else (spec.config_path.parent / base_value).resolve()
+    )
+    payload = {
+        "base_config_sha256": _sha256_file(base_path),
+        "matched_origins": batch.get("matched_origins", False),
+        "datasets": batch.get("datasets"),
+        "feature_sets": batch.get("feature_sets"),
+        "horizon": batch.get("horizon"),
+        "forecasting": batch.get("forecasting"),
+        "evaluation": batch.get("evaluation"),
+        "origin_schedule_sources": batch.get("origin_schedule_sources"),
+    }
+    serialized = yaml.safe_dump(payload, sort_keys=True)
+    return hashlib.sha256(serialized.encode()).hexdigest()
+
+
+def _duplicate_planned_run_ids(specs: list[BenchmarkSpec]) -> list[str]:
+    run_ids = []
+    for spec in specs:
+        path = spec.batch_dir / "planned_runs.csv"
+        if not path.is_file():
+            return []
+        with path.open(encoding="utf-8", newline="") as file:
+            run_ids.extend(str(row["run_id"]) for row in csv.DictReader(file))
+    counts: dict[str, int] = {}
+    for run_id in run_ids:
+        counts[run_id] = counts.get(run_id, 0) + 1
+    return sorted(run_id for run_id, count in counts.items() if count > 1)
 
 
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
