@@ -517,6 +517,12 @@ tables, divergence records, and key plots. The principal result is market-depend
 remains strongest on WIG20 and BIST100, while technical-indicator CNN1D beats persistence on the
 S&P 500 in all five seeds and at all 20 recursive horizons.
 
+The controlled seven-market expanding-recursive study is available under
+[`results/experiments/g7_expanding_recursive_h20/`](results/experiments/g7_expanding_recursive_h20/).
+All 154 runs completed and passed the canonical schedule checks. Persistence remains strongest in
+France, Italy, and the United Kingdom; learned models produce repeatable gains in Canada, Japan,
+and the United States.
+
 ### Direct versus recursive and rolling versus expanding
 
 Two follow-up batches reuse the canonical dated forecast schedule committed with the recursive

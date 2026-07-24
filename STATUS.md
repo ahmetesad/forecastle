@@ -1,14 +1,14 @@
 # Forecastle Project Status
 
-Last updated: 2026-07-23
+Last updated: 2026-07-24
 
 ## Summary
 
 Forecastle is now a reproducible multi-market research framework rather than a single WIG20
-benchmark. The canonical three-market evidence is strongly market-dependent: persistence remains
-best on WIG20 and BIST100, while indicator CNN1D is the strongest repeatable learned result on the
-S&P 500. Direct forecasting and rolling windows are useful robustness checks, but neither is
-uniformly better than recursive forecasting with expanding history.
+benchmark. Evidence across ten indices is strongly market-dependent. Persistence remains difficult
+to beat, but repeatable learned-model gains appear in Canada, Japan, and the United States. Direct
+forecasting and rolling windows are useful robustness checks, but neither is uniformly better than
+recursive forecasting with expanding history.
 
 ## Current implementation
 
@@ -154,6 +154,24 @@ models and linear regression. S&P 500 window effects are mostly small, although 
 indicator CNN1D by 4.27%. On BIST100, rolling improves indicator LSTM-GRU by 3.51% but substantially
 hurts CNN1D, MLP, and Close-only linear regression.
 
+### G7 expanding recursive benchmark
+
+The controlled G7 benchmark completed all 154 planned runs across seven markets, two feature
+conditions, five models, and three neural seeds. All canonical-plan and persistence-control checks
+passed, with no failed or divergent runs.
+
+Persistence remains strongest in France, Italy, and the United Kingdom. Canada indicator CNN1D
+beats persistence by 6.87% in all three seeds. Japan indicator CNN1D improves price RMSE by 2.31%,
+although the Close-only CNN1D result is more seed-consistent. In the United States, Close-only
+LSTM-GRU is strongest at 5.28% better than persistence in all three seeds. Germany's sub-1% DNFS
+advantage is too seed-variable to distinguish confidently from a tie.
+
+Indicators improve DNFS on average in all seven markets, but do not make it universally superior
+to persistence. Their effect on CNN1D is market-dependent, and they generally worsen LSTM-GRU and
+linear regression. Curated metrics, fold and horizon summaries, integrity evidence, matched plans,
+and plots are under
+[`results/experiments/g7_expanding_recursive_h20/`](results/experiments/g7_expanding_recursive_h20/).
+
 ## G7 benchmark design
 
 The G7 protocol covers Canada, France, Germany, Italy, Japan, the United Kingdom, and the United
@@ -200,6 +218,8 @@ or easily regenerated artifacts.
 - BIST100 linear regression with indicators is numerically unstable under recursive forecasting.
 - The G7 DAX snapshot is the `^GDAXI` performance index, while the other datasets do not all share
   that total-return treatment.
+- The G7 expanding-recursive model set does not include standalone LSTM, so it cannot isolate the
+  benefit of LSTM-GRU over an ordinary LSTM.
 
 ## Useful commands
 
